@@ -7,12 +7,15 @@ demo is to show Jev's speed and cost in a real-looking sales conversation.
 
 ## Status
 
-**POC — the spike is done and the conversation flow is designed; the chatbot is not built yet.** Spike S-1 checked how Jev behaves
+**POC — spikes done, conversation designed as an intent-based bot; the chatbot is not built yet.** Spike S-1 checked how Jev behaves
 through the OpenRouter API on Thai sales messages: 42 of 42 test messages routed correctly, about
 345 ms per decision, about $0.00003 per decision. Those were clean, happy-path test messages, so
-read it as "worth building", not as a measure of real-world accuracy. The record, the
-test cases and the raw results are in `spikes/S-1_jev_thai_node_routing/`. The flow design is in
-`memory/product/design/conversation-flow.md`. Next: design the one screen, then build.
+read it as "worth building", not as a measure of real-world accuracy. Spike S-3 then put a
+whole predefined intent catalogue — about 24 intents, Dialogflow-style — into one question, with
+five entity questions in the same call: 121 of 125 Thai messages matched the right intent, every
+named value was found, at about 330 ms and $0.00016 a turn when the API was healthy. (It was not
+always: one run hit 57 empty responses in a row.) Records and raw results are in `spikes/`. The
+design is in `memory/product/design/conversation-flow.md` and `intent-catalogue.md`.
 
 ## Running it
 
