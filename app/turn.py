@@ -223,6 +223,268 @@ def new_session(store: Store, flow: Flow) -> Session:
     return s
 
 
+def fill(template: str, values: dict) -> str:
+    """`{name}`-style placeholders that the product row can fill, then `strip_text` for the rest.
+    The values are put in after the strip so a value's own parentheses survive."""
+    tokens = {}
+    for k, v in values.items():
+        if "{" + k + "}" in template:
+            tokens[f"\x00{k}\x00"] = str(v)
+            template = template.replace("{" + k + "}", f"\x00{k}\x00")
+    text = strip_text(template)
+    for tok, v in tokens.items():
+        text = text.replace(tok, v)
+    return text
+
+
+# --- the act: what a matched intent does here (Story 1.4 fills the order form on top of this)
+
+UNREACHABLE = "ขอโทษด้วยน้า ตอนนี้ติดต่อระบบไม่ได้ค่ะ กดเลือกจากด้านล่างได้เลยน้า"   # the could-not-reach line
+WHICH_PRODUCT = "ตัวไหนคะ? พิมพ์ชื่อหรือเลือกจากรายการได้เลยน้า"                 # contract: "the bot asks which product"
+ORDER_INTENTS = ("order_product", "inform", "change_order", "view_order", "affirm", "deny",
+                 "give_delivery_details", "cancel_order")
+SLOTS = ("quantity", "brew", "roast", "payment")
+
+
+def set_context(s: Session, flow: Flow, name: str, params: dict | None, turn_no_after: int) -> None:
+    """`expires_after_turn` is absolute: the turn being committed plus the catalogue's lifespan."""
+    lifespan = int(flow.contexts.get(name, {}).get("lifespan", 2))
+    s.contexts[name] = {"expires_after_turn": turn_no_after + lifespan, "params": dict(params or {})}
+
+
+def expire_contexts(s: Session) -> None:
+    """Drop every context whose `expires_after_turn` has been reached — after the turn's own sets,
+    so a context set this turn survives and one set two turns ago goes."""
+    s.contexts = {n: c for n, c in s.contexts.items() if c.get("expires_after_turn", 0) > s.turn_no}
+
+
+def lead(s: Session, flow: Flow, turn_no_after: int) -> None:
+    """`then: lead` — the prompt for the first empty slot of the order. Story 1.4 fills this."""
+    return None
+
+
+def resume(s: Session, flow: Flow, turn_no_after: int) -> None:
+    """`then: resume` — after a prepared answer, ask the pending question again and re-arm its context."""
+    p = s.pending_prompt
+    if not p:
+        return
+    asked = next((b for b in s.transcript if b.get("who") == "bot" and b.get("id") == p.get("message_id")), None)
+    if asked is None:
+        return
+    say(s, asked["text"], asked.get("buttons", []), response_id=f"resume:{p.get('slot')}")
+    s.pending_prompt = dict(p, message_id=s.last_bot_message["id"])
+    if p.get("context"):
+        set_context(s, flow, p["context"], p.get("params"), turn_no_after)
+
+
+def default_reply(s: Session, flow: Flow, response_id: str) -> dict:
+    return say(s, flow.default_shop_said, help_buttons(flow), response_id=response_id)
+
+
+def act(s: Session, flow: Flow, intent: str, entities: dict, *, sku: str | None, product_from: str | None,
+        turn_no_after: int) -> list[dict]:
+    """Apply a matched intent to the copy: its writes, its reply, its contexts, its `then`.
+    Returns `applied`. `start_over` is not handled here (it ends the session — see run_turn)."""
+    it = flow_intent(flow, intent)
+    applied: list[dict] = []
+    s.miss_count = 0
+    text = strip_text(it["response"]) or it["response"]     # as written when nothing but notes is left
+    buttons = buttons_of(it)
+
+    if intent in ("product_info", "ask_price", "select_option"):
+        if sku and sku in flow.products:
+            row = flow.products[sku]
+            template = it["response"] if intent != "select_option" else flow_intent(flow, "product_info")["response"]
+            say(s, fill(template, row), buttons, response_id=intent)
+            if s.focus_sku != sku:
+                applied.append({"set": "focus_sku", "to": sku, "product_from": product_from})
+            s.focus_sku = sku
+            set_context(s, flow, "offer_product", {"sku": sku}, turn_no_after)
+        else:
+            say(s, WHICH_PRODUCT, [button("ดูเมล็ดทั้งหมด", "browse_catalog")], response_id=intent)
+    elif intent == "ask_recommendation":
+        # the catalogue's first clause: brew unknown → ask how they brew; the rest is Story 1.4's
+        recommend = s.order.get("recommend") or {}
+        if recommend.get("brew") is None:
+            opts = flow.entities["brew"]["options"]
+            say(s, clause(it["response"], "if brew unknown"),
+                [button(label, "inform", {"brew": key}) for key, label in opts.items()], response_id=intent)
+            set_context(s, flow, "ask_brew", None, turn_no_after)
+            s.pending_prompt = {"slot": "brew", "context": "ask_brew", "params": {}, "message_id": s.last_bot_message["id"]}
+        elif recommend.get("roast") is None:
+            opts = flow.entities["roast"]["options"]
+            say(s, clause(it["response"], "else if roast unknown"),
+                [button(label, "inform", {"roast": key}) for key, label in opts.items()], response_id=intent)
+            set_context(s, flow, "ask_roast", None, turn_no_after)
+            s.pending_prompt = {"slot": "roast", "context": "ask_roast", "params": {}, "message_id": s.last_bot_message["id"]}
+        else:
+            default_reply(s, flow, intent)
+    elif intent in ORDER_INTENTS:
+        # the minimal act: the text as written, no order-form write (Story 1.4)
+        for slot in SLOTS:
+            value = entities.get(slot)
+            if value and value != NOT_MENTIONED:
+                entry = {"set": slot, "to": value}
+                if slot == "quantity":
+                    entry["product_from"] = product_from
+                applied.append(entry)
+        say(s, text, buttons, response_id=intent)
+    else:   # greet · help · thanks_bye · browse_catalog · ask_promotion · faq.*
+        say(s, text, buttons, response_id=intent)
+
+    then = it.get("then", "wait")
+    if then == "lead":
+        lead(s, flow, turn_no_after)
+    elif then == "resume":
+        resume(s, flow, turn_no_after)
+    return applied
+
+
+# --- the turn (contract § Committing a turn)
+
+class TurnError(Exception):
+    def __init__(self, status: int, message: str):
+        super().__init__(message)
+        self.status, self.message = status, message
+
+
+def you_bubble(text: str, kind: str, masked: bool = False) -> dict:
+    return {"who": "you", "text": text, "kind": kind, "masked": masked}
+
+
+def _result(s: Session, outcome: str, *, you: dict | None, bot: list, entry: dict | None, raw: dict | None,
+            model_status: str = "live", ended: bool = False) -> dict:
+    return {"session_id": s.session_id, "turn_no": s.turn_no, "outcome": outcome, "you": you, "bot": list(bot),
+            "log_entry": entry, "raw": raw, "model_status": model_status, "ended": ended}
+
+
+def run_turn(store: Store, flow: Flow, client: jev.Client, session_id: str, turn_id: str, *,
+             text: str | None = None, button: dict | None = None, spend_cap_usd: float | None = None,
+             clock=jev.now_utc) -> dict:
+    """One customer message, typed or clicked, committed whole or not at all. Raises TurnError for
+    a bad request (400) or an unknown session (404); everything else is a result dict."""
+    if not turn_id or not isinstance(turn_id, str):
+        raise TurnError(400, "turn_id is missing")
+    if (text is None) == (button is None):
+        raise TurnError(400, "send text or button, not both")
+    if text is not None and (not isinstance(text, str) or not text.strip()):
+        raise TurnError(400, "text is empty")
+    if button is not None and not isinstance(button, dict):
+        raise TurnError(400, "button must be an object")
+    with store.lock(session_id):
+        s = store.get(session_id)
+        if s is None:
+            raise TurnError(404, "unknown or expired session")
+        if turn_id == s.last_turn_id:                                       # step 3
+            if s.last_response is not None:
+                return dict(s.last_response, repeat=True)
+            return _result(s, "repeat", you=None, bot=[], entry=s.log[-1] if s.log else None, raw=None)
+        if button is not None:
+            return _click(store, flow, s, turn_id, button, clock)
+        return _typed(store, flow, client, s, turn_id, text.strip(), spend_cap_usd, clock)
+
+
+def _click(store: Store, flow: Flow, s: Session, turn_id: str, button: dict, clock) -> dict:
+    current = current_message_id(s)
+    bubble = next((b for b in s.transcript if b.get("who") == "bot" and b.get("id") == current), None)
+    label, intent = button.get("label"), button.get("intent")
+    known = bubble is not None and any(b["label"] == label and b["intent"] == intent for b in bubble["buttons"])
+    if button.get("message_id") != current or not known:                    # step 4: stale → ignored
+        return _result(s, "ignored", you=None, bot=[], entry=None, raw=None)
+    params = dict(button.get("params") or {})
+    at = jev.stamp(clock())
+    you = you_bubble(label, "clicked")
+    if intent == "start_over":
+        return _start_over(store, flow, s, turn_id, at, you, verdict=None, kind="clicked")
+    c = s.copy()
+    c.transcript.append(you)
+    before = len(c.transcript)
+    turn_no_after = c.turn_no + 1
+    sku, product_from = resolve_product(c, params)
+    applied = act(c, flow, intent, params, sku=sku, product_from=product_from, turn_no_after=turn_no_after)
+    c.turn_no = turn_no_after
+    expire_contexts(c)
+    entry = log_entry(s, flow, turn_no=c.turn_no, turn_id=turn_id, at=at, kind="clicked", text=label,
+                      outcome="matched", applied=applied, response_id=intent, contexts_after=c.live_contexts())
+    c.log.append(entry)
+    c.last_turn_id = turn_id
+    result = _result(c, "matched", you=you, bot=c.transcript[before:], entry=entry, raw=None)
+    c.last_response = result
+    store.commit(c)                                                          # step 7: swap and snapshot
+    return result
+
+
+def _typed(store: Store, flow: Flow, client: jev.Client, s: Session, turn_id: str, text: str,
+           spend_cap_usd: float | None, clock) -> dict:
+    at = jev.stamp(clock())
+    v = classify(s, text, flow, client, spend_cap_usd=spend_cap_usd, clock=clock)   # step 5: no change held
+    raw = {"request": v.request, "response": v.answer.raw if v.answer is not None else None}
+    masked = v.intent == "give_delivery_details"
+    you = you_bubble(text, "typed", masked)
+    if v.outcome != "matched":
+        return _miss(store, flow, s, turn_id, at, you, v, raw)
+    if v.intent == "start_over":
+        return _start_over(store, flow, s, turn_id, at, you, verdict=v, kind="typed", raw=raw)
+    c = s.copy()                                                             # step 6
+    c.transcript.append(you)
+    before = len(c.transcript)
+    turn_no_after = c.turn_no + 1
+    applied = act(c, flow, v.intent, v.entities, sku=v.sku, product_from=v.product_from, turn_no_after=turn_no_after)
+    c.turn_no = turn_no_after
+    expire_contexts(c)
+    entry = log_entry(s, flow, turn_no=c.turn_no, turn_id=turn_id, at=at, kind="typed",
+                      text=MASK_FOR_LOG if masked else text, outcome="matched", verdict=v, applied=applied,
+                      response_id=v.intent, contexts_after=c.live_contexts())
+    c.log.append(entry)
+    c.last_turn_id = turn_id
+    result = _result(c, "matched", you=you, bot=c.transcript[before:], entry=entry, raw=raw)
+    c.last_response = result
+    store.commit(c)                                                          # step 7
+    c.raw[turn_id] = raw
+    return result
+
+
+def _miss(store: Store, flow: Flow, s: Session, turn_id: str, at: str, you: dict, v: Verdict, raw: dict) -> dict:
+    """Step 5: `miss_count` +1, a log entry, the fallback or could-not-reach message — nothing else."""
+    c = s.copy()
+    c.transcript.append(you)
+    before = len(c.transcript)
+    c.miss_count += 1
+    same = [button(b["label"], b["intent"], b.get("params")) for b in c.live_buttons]
+    if v.outcome == "fallback":
+        if c.miss_count == 1:
+            say(c, strip_text(flow.fallback["ladder"][0]), same, variant="fallback", response_id="fallback.1", live=False)
+        else:
+            say(c, strip_text(flow.fallback["ladder"][1]), help_buttons(flow), variant="fallback", response_id="fallback.2", live=False)
+        status = "live"
+    elif v.outcome == "cap_reached":
+        say(c, UNREACHABLE, same, variant="system", response_id="system.cap", live=False)
+        status = "cap"
+    else:
+        say(c, UNREACHABLE, same, variant="system", response_id="system.unreachable", live=False)
+        status = "unreachable"
+    response_id = c.transcript[-1]["response_id"]
+    entry = log_entry(s, flow, turn_no=c.turn_no, turn_id=turn_id, at=at, kind="typed", text=you["text"],
+                      outcome=v.outcome, verdict=v, applied=[], response_id=response_id)
+    c.log.append(entry)
+    c.last_turn_id = turn_id
+    result = _result(c, v.outcome, you=you, bot=c.transcript[before:], entry=entry, raw=raw, model_status=status)
+    c.last_response = result
+    store.commit(c)
+    c.raw[turn_id] = raw
+    return result
+
+
+def _start_over(store: Store, flow: Flow, s: Session, turn_id: str, at: str, you: dict, *, verdict, kind: str,
+                raw: dict | None = None) -> dict:
+    """`start_over` ends the session — the snapshot goes — and a new one starts with the greeting."""
+    entry = log_entry(s, flow, turn_no=s.turn_no, turn_id=turn_id, at=at, kind=kind, text=you["text"],
+                      outcome="matched", verdict=verdict, applied=[], response_id="start_over", contexts_after=[])
+    store.end(s.session_id)
+    fresh = new_session(store, flow)
+    return _result(fresh, "matched", you=you, bot=list(fresh.transcript), entry=entry, raw=raw, ended=True)
+
+
 # --- the log entry (contract § The turn log)
 
 def jev_block(answer: jev.JevAnswer, by_state: bool = False) -> dict:
