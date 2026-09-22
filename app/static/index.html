@@ -1,1 +1,54 @@
-<!doctype html><title>placeholder</title><p>placeholder until task 04 copies the prototype</p>
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Beanly · Scripted Chatbot with Jev — prototype</title>
+<link rel="stylesheet" href="assets/design-system.css">
+</head>
+<body>
+<div class="app">
+  <div class="band band-top" data-testid="band-top">
+    <div class="chat-header">
+      <span>Beanly ☕</span>
+      <span class="spacer"></span>
+      <button class="btn-quiet" id="start-over" data-testid="start-over">เริ่มใหม่</button>
+    </div>
+  </div>
+  <div class="cols">
+    <section class="chat" data-testid="chat">
+      <div class="messages" id="messages" data-testid="messages"></div>
+      <div class="composer" id="composer" data-testid="composer" data-state="ready">
+        <input type="text" placeholder="พิมพ์ข้อความ…" aria-label="พิมพ์ข้อความ">
+        <span class="helper"></span>
+        <button class="btn-send" id="send" data-testid="send">ส่ง</button>
+      </div>
+    </section>
+    <section class="panel" data-testid="panel">
+      <div class="panel-header">JEV · <b id="model-id">jev-1.13</b> <span class="badge live" data-testid="model-status" id="model-status">live</span> · <span id="rate" data-testid="rate"></span></div>
+      <div class="rows" id="rows"></div>
+      <div class="key-info" id="key-info" data-testid="key-info">
+        <div class="status" id="key-status"></div>
+        <div><div class="k">Avg response</div><div class="v" id="avg-ms" data-testid="avg-ms">—</div></div>
+        <div><div class="k">Total cost</div><div class="v" id="total-baht" data-testid="total-baht">฿0.000</div></div>
+        <div><div class="k">Total turns</div><div class="v" id="total-turns" data-testid="total-turns">0</div></div>
+      </div>
+      <aside class="viewer" id="viewer" data-testid="viewer" data-open="false" style="display:none">
+        <h3><span id="viewer-title">Turn</span><button class="close" id="viewer-close" data-testid="viewer-close">close</button></h3>
+        <h4>What was sent</h4><div id="viewer-sent" data-testid="viewer-sent"></div>
+        <h4>What came back</h4><div id="viewer-back" data-testid="viewer-back"></div>
+        <h4>What the bot did</h4><div id="viewer-applied" data-testid="viewer-applied"></div>
+      </aside>
+    </section>
+  </div>
+  <div class="band band-bottom" data-testid="band-bottom"></div>
+</div>
+<script src="assets/shared.js"></script>
+<script src="assets/speed.js"></script>
+
+<script>
+window.PROTO_FORCE_FAIL = new URLSearchParams(location.search).get('fail') === '1';
+boot({ after: () => speedMount() });
+</script>
+</body>
+</html>

@@ -19,16 +19,27 @@ design is in `memory/product/design/conversation-flow.md` and `intent-catalogue.
 
 ## Running it
 
-There is no chatbot to run yet. You can re-run the spike (about $0.004 of OpenRouter credit):
+Python 3.11, standard library only — nothing to install.
+
+```
+cp .env.example .env        # then fill in the three names: your OpenRouter key, the THB/USD
+                            # rate and the date it was taken. .env is ignored by git.
+python3.11 -m app           # one warm-up call to Jev, then: ready · warm-up 200 · http://127.0.0.1:8765
+```
+
+Open `http://127.0.0.1:8765/`. The server binds to 127.0.0.1 only; the key stays in the server
+process and never reaches the browser. It refuses to start, with one plain line, when the key or
+the rate is missing. `PORT=8766 python3.11 -m app` starts a second, throwaway instance.
+
+Tests (no network, no Jev): `python3.11 -m unittest discover -s tests -t . -v`
+
+The spike can still be re-run (about $0.004 of OpenRouter credit):
 
 ```
 cd spikes/S-1_jev_thai_node_routing
-python3.11 -m venv .venv && source .venv/bin/activate   # standard library only
 python run_spike.py --dry-run                           # builds every request, sends nothing
 python run_spike.py --cap 0.50                          # stops itself at the cap
 ```
- You will need your own `OPENROUTER_API_KEY` in a local `.env` file — it is
-ignored by git and must never be committed.
 
 ## Where things are
 
