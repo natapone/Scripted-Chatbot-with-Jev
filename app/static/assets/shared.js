@@ -34,12 +34,15 @@ function storedId() { try { return sessionStorage.getItem("session_id") || ""; }
 
 /* ---------------- chat column ---------------- */
 let botCount = 0, youCount = 0;
-/* A bot bubble as the server sends it: {id, text, buttons:[{label,intent,params}], variant, response_id}.
-   Its `id` is the message_id a click names; every earlier set of buttons goes dead. */
+/* A bot bubble as the server sends it: {id, text, buttons:[{label,intent,params}], variant, response_id,
+   readback?}. Its `id` is the message_id a click names; every earlier set of buttons goes dead. A
+   read-back carries its grid as data (Story 1.4's Delta): {rows: [[label, amount]], total, delivery_text,
+   lead, tail} — the page draws the grid from it and leaves `text` (the same read-back as one text) to Jev. */
 function bot(m) {
   botCount += 1;
   const id = m.id; const buttons = m.buttons || [];
-  const b = el("div", { class: `bubble bot ${m.variant || "plain"}`, "data-testid": `bot-${id}`, "data-response-id": m.response_id || "" }, el("div", { class: "name", text: "Beanly" }), document.createTextNode(m.text || ""));
+  const b = el("div", { class: `bubble bot ${m.variant || "plain"}`, "data-testid": `bot-${id}`, "data-response-id": m.response_id || "" }, el("div", { class: "name", text: "Beanly" }));
+  if (m.readback) b.append(...readbackNodes(m.readback)); else b.append(document.createTextNode(m.text || ""));
   $("#messages").append(b);
   document.querySelectorAll(".opt[data-live='true']").forEach((o) => o.setAttribute("data-live", "false"));
   let wrap = null;
@@ -58,6 +61,19 @@ function you(m) {
   const b = el("div", { class: "bubble you", "data-testid": `you-${youCount}`, "data-kind": m.kind, "data-masked": String(!!m.masked) }, document.createTextNode(m.text || ""));
   if (m.kind === "clicked") b.append(el("span", { class: "badge", "data-testid": "badge-clicked", text: "clicked · no model call" }));
   $("#messages").append(b); scrollNew();
+}
+/* ReadBack (05_components.md): the prototype's grid — one row per line, the discount, the fee, the COD
+   fee, the total in bold — from the server's data. The last row is the total, with `data-value`. */
+function readbackNodes(rb) {
+  const g = el("div", { class: "readback", "data-testid": "readback" });
+  const rows = rb.rows || [];
+  rows.forEach(([k, v], i) => {
+    if (i < rows.length - 1) g.append(el("span", { text: k }), el("span", { text: v }));
+    else g.append(el("span", { class: "total", text: k }), el("span", { class: "total", "data-testid": "readback-total", "data-value": rb.total, text: v }));
+  });
+  const out = [document.createTextNode(rb.lead || ""), g];
+  if (rb.tail) out.push(document.createTextNode(rb.tail));
+  return out;
 }
 function scrollNew() { const m = $("#messages"); m.scrollTop = m.scrollHeight; }
 function pressed(wrap, label) { if (!wrap) return; wrap.querySelectorAll(".opt").forEach((o) => { o.setAttribute("data-live", "false"); if (o.textContent === label) o.classList.add("pressed"); }); }
