@@ -12,10 +12,14 @@
 !/spikes/
 !/tests/
 !/prototypes/
+!/app/
+!/.env.example
 
 # --- never, even inside an allowlisted folder ---
+/var/
 .env
 .env.*
+!/.env.example
 .envrc
 *.key
 *.pem
