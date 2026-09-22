@@ -24,7 +24,7 @@ proven in a browser against the prototype.
 ## § 0 — Cold start and hazards
 
 **Readiness:** *Epic 0 of 3 built · 0 signed* — this is Epic 1 of 3, the first; no dry-walk record
-exists yet (`memory/project/results/walk-dry-epic-1.md` is written by the build).
+exists yet (the dry-walk result file under `memory/project/results/` is written by the build).
 
 The cold start is taken from `memory/product/profile.md` § Cold start **once the build fills it**;
 until then this section names what the build must make true. Paths are absolute.
