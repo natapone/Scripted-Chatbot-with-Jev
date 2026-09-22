@@ -1,5 +1,6 @@
-"""Story 1.3 — the turn loop. Hermetic: Jev is a scripted connection behind the real `Client`
-(no socket), the clock is fixed, snapshots go to a temp dir."""
+"""Story 1.3 — the turn loop; Story 1.4 — the order form and the responses (`LeadTests`,
+`OrderTests`). Hermetic: Jev is a scripted connection behind the real `Client` (no socket), the
+clock is fixed, snapshots go to a temp dir."""
 from __future__ import annotations
 
 import json
@@ -8,7 +9,7 @@ import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from app import flow, jev, session, turn
+from app import flow, jev, order, session, turn
 from tests.test_jev import FAKE_KEY, scripted
 
 T0 = datetime(2026, 9, 22, 6, 48, 10, 0, tzinfo=timezone.utc)
@@ -407,8 +408,9 @@ class RunTurnTests(unittest.TestCase):
         self.assertEqual(r2.state().pending_prompt, {"slot": "brew", "context": "ask_brew", "params": {}, "message_id": "m3"})
         self.assertEqual(r2.state().contexts, {"ask_brew": {"expires_after_turn": 3, "params": {}}})
         res = r2.click({"label": "ดริป pour-over เฟรนช์เพรส โมก้าพอต หรือกาแฟดำแบบ filter", "intent": "inform", "params": {"brew": "filter"}, "message_id": "m3"}, "c2")
-        self.assertEqual((res["outcome"], res["log_entry"]["applied"]), ("matched", [{"set": "brew", "to": "filter"}]))
-        self.assertEqual(r2.state().order["recommend"], {"brew": None, "roast": None})   # written by Story 1.4, not here
+        self.assertEqual((res["outcome"], res["log_entry"]["applied"]), ("matched", [{"set": "recommend.brew", "to": "filter"}]))
+        self.assertEqual(r2.state().order["recommend"], {"brew": "filter", "roast": None})   # Story 1.4 writes it; the roast is asked next
+        self.assertEqual(res["bot"][0]["text"], "ชอบคั่วระดับไหนคะ?")
         # bad requests
         for kw in ({"text": ""}, {"text": "x", "button": {}}, {}):
             with self.assertRaises(turn.TurnError) as cm:
@@ -436,7 +438,7 @@ class RunTurnTests(unittest.TestCase):
         res = r.typed("ค่าส่งเท่าไหร่คะ", "t3")
         s = r.state()
         self.assertEqual((res["outcome"], res["turn_no"], len(res["bot"])), ("matched", 3, 2))
-        self.assertEqual((res["bot"][0]["response_id"], res["bot"][0]["text"]), ("faq.shipping_fee", "{FAQ-01.answer}"))
+        self.assertEqual((res["bot"][0]["response_id"], res["bot"][0]["text"]), ("faq.shipping_fee", "ค่าส่ง 100 บาททั่วประเทศ ส่งฟรีเมื่อสั่งครบ 5 ถุงขึ้นไป จัดส่ง 2-3 วันทำการ"))   # Story 1.4: the CSV answer
         self.assertEqual((res["bot"][1]["response_id"], res["bot"][1]["text"]), ("resume:quantity", "รับกี่ถุงดีคะ?"))
         self.assertEqual(labels(res["bot"][1]["buttons"]), ["1 ถุง", "2 ถุง"])
         self.assertNotEqual(res["bot"][1]["id"], asked_id)
@@ -449,7 +451,8 @@ class RunTurnTests(unittest.TestCase):
         self.assertEqual(res["raw"]["request"]["state"]["awaiting"], "quantity")
         # turn 4: another; the context is re-armed to 6 (the traced table), and grinding keeps its SOP line
         res = r.typed("บดให้ได้ไหมคะ", "t4")
-        self.assertEqual(res["bot"][0]["text"], "กาแฟดีต้องคู่ grind ที่ตรงเสมอค่ะ")
+        self.assertTrue(res["bot"][0]["text"].endswith(" กาแฟดีต้องคู่ grind ที่ตรงเสมอค่ะ"))   # Story 1.4: FAQ-06's answer + the SOP line
+        self.assertTrue(res["bot"][0]["text"].startswith("มีค่ะ"))
         self.assertEqual(r.state().contexts["ask_quantity"]["expires_after_turn"], 6)
         self.assertEqual(r.state().turn_no, 4)
         # start_over: the old snapshot is deleted, a new id issued, the greeting returned
@@ -507,6 +510,476 @@ class RunTurnTests(unittest.TestCase):
         blob = json.dumps([s.to_snapshot(), res, s.raw], ensure_ascii=False, default=str)
         self.assertNotIn(FAKE_KEY, blob)
         self.assertNotIn(FAKE_KEY, r.snapshot().__repr__())
+
+
+
+class LeadTests(unittest.TestCase):
+    """Story 1.4 task 02 — `lead()` asks for the first empty slot in the SOP's order."""
+
+    def test_lead_from_an_empty_form_to_the_read_back(self):  # conversation-flow § The order form
+        r = Rig(self)
+        s = r.s
+        # an empty form: the lead recommends — brew first, then roast, then the pair from the table
+        turn.lead(s, FLOW, 1)
+        self.assertEqual(s.transcript[-1]["text"], "เยี่ยมเลยค่ะ — งั้นรบกวนถามต่ออีกนิดน้า จะได้ recommend ตรงค่ะ ปกติชงแบบไหนคะ?")
+        self.assertEqual([b["params"] for b in s.transcript[-1]["buttons"]], [{"brew": "espresso_milk"}, {"brew": "filter"}, {"brew": "cold_brew"}])
+        self.assertEqual((s.pending_prompt["slot"], s.pending_prompt["context"], list(s.contexts)), ("brew", "ask_brew", ["ask_brew"]))
+        s.order["recommend"]["brew"] = "filter"
+        turn.lead(s, FLOW, 2)
+        self.assertEqual(s.transcript[-1]["text"], "ชอบคั่วระดับไหนคะ?")
+        self.assertEqual([b["params"]["roast"] for b in s.transcript[-1]["buttons"]], ["light", "medium", "dark", "decaf"])
+        self.assertEqual(s.pending_prompt["slot"], "roast")
+        s.order["recommend"]["roast"] = "light"
+        turn.lead(s, FLOW, 3)
+        pair = s.transcript[-1]
+        self.assertEqual(pair["text"], "story bean ก่อนนะคะ — ตัวแรก เกอิชา: คั่วอ่อน · ดอกไม้ มะลิ พีช · บอดี้เบา อีกตัว วอชด์ อาราบิก้า: คั่วอ่อน · ส้ม มะนาว ชาเขียว · สะอาด สดชื่น สนใจตัวไหนคะ?")
+        self.assertEqual(pair["buttons"], [{"label": "เกอิชา", "intent": "select_option", "params": {"product": "DH-001"}},
+                                           {"label": "วอชด์ อาราบิก้า", "intent": "select_option", "params": {"product": "MM-001"}},
+                                           {"label": "ดูตัวอื่น", "intent": "browse_catalog", "params": {}}])
+        self.assertEqual((s.options_shown, s.contexts["options_shown"]["params"], s.pending_prompt), (["DH-001", "MM-001"], {"skus": ["DH-001", "MM-001"]}, None))
+        self.assertEqual(s.order["recommend"], {"brew": None, "roast": None})           # cleared once given
+        # with `recommend=False` an empty form waits (ask_promotion, view_order)
+        n = len(s.transcript)
+        turn.lead(s, FLOW, 4, recommend=False)
+        self.assertEqual(len(s.transcript), n)
+        # a line with no quantity: the quantity question with its four buttons and the context's sku
+        s.order["lines"] = [{"sku": "DH-001", "qty": None, "added_by": "customer"}]
+        turn.lead(s, FLOW, 4)
+        q = s.transcript[-1]
+        self.assertEqual((q["text"], q["response_id"], q["variant"]), ("รับกี่ถุงดีคะ? สั่งครบ 5 ถุงส่งฟรีน้า", "ask_quantity", "plain"))
+        self.assertEqual(q["buttons"], [{"label": f"{n} ถุง", "intent": "inform", "params": {"quantity": str(n)}} for n in (1, 2, 3, 5)])
+        self.assertEqual(s.contexts["ask_quantity"], {"expires_after_turn": 6, "params": {"sku": "DH-001"}})
+        self.assertEqual(s.pending_prompt, {"slot": "quantity", "context": "ask_quantity", "params": {"sku": "DH-001"}, "message_id": q["id"]})
+        self.assertEqual(s.last_bot_message["id"], q["id"])
+        self.assertEqual(s.live_buttons[0]["message_id"], q["id"])
+        # quantity filled: the one promotion that fits, offered once, with exactly its effect
+        s.order["lines"][0]["qty"] = 1
+        turn.lead(s, FLOW, 5)
+        pr = s.transcript[-1]
+        self.assertEqual(pr["text"], "ซื้อเกอิชาคู่กับเนเชอรัล แอนแอโรบิก รับส่วนลด 80 บาท สำหรับคอกาแฟคั่วอ่อน สนใจไหมคะ? ไม่ urgent น้า ลองดูก่อนได้")
+        self.assertEqual(labels(pr["buttons"]), ["เพิ่มเนเชอรัล แอนแอโรบิก", "ไม่เป็นไร เอาเท่าเดิม"])
+        self.assertEqual([b["intent"] for b in pr["buttons"]], ["affirm", "deny"])
+        self.assertEqual(s.contexts["offer_promo"]["params"], {"promo_id": "PROMO-02", "effect": {"add_line": "DH-003"}})
+        self.assertEqual((s.promos_offered, s.pending_prompt["slot"], pr["response_id"]), (["PROMO-02"], "promotion", "promo.offer"))
+        # offered once: the next lead moves on to payment, with the fee
+        turn.lead(s, FLOW, 6)
+        pay = s.transcript[-1]
+        self.assertEqual(pay["text"], "ค่าส่ง 100 บาท ค่ะ ชำระแบบไหนสะดวกคะ? โอนผ่านบัญชีธนาคาร หรือเก็บเงินปลายทาง (มีค่าบริการเพิ่ม 30 บาท)")
+        self.assertEqual(pay["buttons"], [{"label": "โอนผ่านธนาคาร", "intent": "inform", "params": {"payment": "transfer"}},
+                                          {"label": "เก็บเงินปลายทาง", "intent": "inform", "params": {"payment": "cod"}}])
+        self.assertEqual((s.pending_prompt["slot"], s.pending_prompt["context"]), ("payment", "ask_payment"))
+        self.assertEqual(s.promos_offered, ["PROMO-02"])
+        s.order["lines"][0]["qty"] = 5                                               # five bags: the fee reads ฟรี
+        turn.lead(s, FLOW, 6)
+        self.assertTrue(s.transcript[-1]["text"].startswith("ค่าส่ง ฟรี ค่ะ"))
+        s.order["lines"][0]["qty"] = 1
+        # payment set: the delivery question with the sample button
+        s.order["payment"] = "cod"
+        turn.lead(s, FLOW, 7)
+        d = s.transcript[-1]
+        self.assertEqual(d["text"], "รบกวนขอชื่อ ที่อยู่ และเบอร์โทรสำหรับจัดส่งค่ะ — เดโมนี้ไม่ส่งของจริง ใช้ข้อมูลสมมติได้เลยน้า")
+        self.assertEqual(d["buttons"], [{"label": "ใช้ข้อมูลตัวอย่าง", "intent": "give_delivery_details", "params": {"sample": True}}])
+        self.assertEqual((s.pending_prompt["slot"], list(s.contexts)[-1]), ("delivery", "ask_delivery"))
+        # delivery set: the read-back as data, the hash in the context, the address masked for Jev
+        s.order["delivery_text"] = ADDRESS
+        turn.lead(s, FLOW, 8)
+        rb = s.transcript[-1]
+        self.assertEqual((rb["variant"], rb["response_id"], labels(rb["buttons"])), ("read-back", "confirm", ["ยืนยัน", "ขอแก้ไข"]))
+        self.assertEqual([b["intent"] for b in rb["buttons"]], ["affirm", "deny"])
+        self.assertEqual(rb["readback"]["rows"], [["เกอิชา × 1 ถุง", "980 บาท"], ["ค่าส่ง", "100 บาท"], ["ค่าบริการเก็บเงินปลายทาง", "30 บาท"], ["รวม", "1,110 บาท"]])
+        self.assertEqual((rb["readback"]["total"], rb["readback"]["delivery_text"], rb["readback"]["lead"]), (1110, ADDRESS, "สรุปออเดอร์ค่ะ"))
+        self.assertTrue(rb["text"].startswith("สรุปออเดอร์ค่ะ\nเกอิชา × 1 ถุง — 980 บาท"))
+        self.assertIn(ADDRESS, rb["text"])
+        self.assertIn("รบกวนคุณพี่ตรวจรายการอีกครั้ง แล้วยืนยันให้แอดน้า 🙏🏻", rb["text"])
+        self.assertNotIn(ADDRESS, s.last_bot_message["text_for_jev"])
+        self.assertIn(turn.MASK_FOR_JEV, s.last_bot_message["text_for_jev"])
+        h = s.contexts["confirm_order"]["params"]["order_hash"]
+        self.assertEqual(h, order.order_hash(s.order))
+        self.assertEqual(s.pending_prompt, {"slot": "confirmation", "context": "confirm_order", "params": {"order_hash": h}, "message_id": rb["id"]})
+        # a confirmed order is terminal: the lead asks nothing
+        s.order["order_code"] = "BEAN-2609-0009"
+        n = len(s.transcript)
+        turn.lead(s, FLOW, 9)
+        self.assertEqual(len(s.transcript), n)
+        # the snapshot carries the read-back's data and round-trips
+        r.store.commit(s)
+        snap = r.snapshot()
+        self.assertEqual(snap["transcript"][-1]["readback"]["total"], 1110)
+        self.assertNotIn("readback", snap["transcript"][0])                            # only a read-back bubble has it
+
+    def test_resume_after_a_faq_re_asks_with_the_grid(self):  # contract § Traced turn 3; walk § 3.2
+        r = Rig(self, (200, reply("faq.shipping_fee", 0.97)), (200, reply("faq.payment_methods", 0.9)))
+        s = r.s
+        s.order["lines"] = [{"sku": "DH-001", "qty": 1, "added_by": "customer"}]
+        s.order["payment"], s.order["delivery_text"] = "cod", ADDRESS
+        s.promos_offered = ["PROMO-02"]                                                 # declined earlier
+        turn.lead(s, FLOW, 1)                                                          # the read-back is pending
+        s.turn_no, s.last_turn_id = 1, "t0"
+        r.store.commit(s)
+        rb_id = s.last_bot_message["id"]
+        res = r.typed("ค่าส่งเท่าไหร่คะ", "t1")
+        self.assertEqual((res["outcome"], len(res["bot"])), ("matched", 2))
+        self.assertEqual((res["bot"][0]["response_id"], res["bot"][0]["buttons"]), ("faq.shipping_fee", []))
+        again = res["bot"][1]
+        self.assertEqual((again["response_id"], again["variant"], labels(again["buttons"])), ("resume:confirmation", "read-back", ["ยืนยัน", "ขอแก้ไข"]))
+        self.assertEqual(again["readback"]["total"], 1110)
+        self.assertNotEqual(again["id"], rb_id)
+        s = r.state()
+        self.assertEqual(s.contexts["confirm_order"]["expires_after_turn"], 4)         # re-armed: 2 + lifespan 2
+        self.assertEqual(s.pending_prompt["message_id"], again["id"])
+        self.assertEqual(s.order["lines"][0]["qty"], 1)                                 # a FAQ writes nothing
+        self.assertEqual(res["log_entry"]["applied"], [])
+        self.assertNotIn(ADDRESS, json.dumps(res["raw"]["request"], ensure_ascii=False))   # shop_said is masked
+        self.assertEqual(res["raw"]["request"]["state"]["awaiting"], "confirmation")
+        # a FAQ with nothing pending answers and waits
+        s.pending_prompt = None
+        r.store.commit(s)
+        res = r.typed("จ่ายยังไงได้บ้าง", "t2")
+        self.assertEqual(len(res["bot"]), 1)
+        self.assertTrue(res["bot"][0]["text"].startswith("รับชำระ 2 แบบ"))
+
+
+
+def blob(*things) -> str:
+    return json.dumps(things, ensure_ascii=False, default=str)
+
+
+class OrderTests(unittest.TestCase):
+    """Story 1.4 task 03 — the order intents, driven through `run_turn` with stubbed verdicts."""
+
+    def test_the_traced_conversation(self):  # AC-1: contract § Traced, turns 1–10; AC-6's NFR10 half
+        r = Rig(self, (200, reply("ask_price", 0.93, product="DH-001")),
+                (200, reply("affirm", 0.88)),
+                (200, reply("faq.shipping_fee", 0.97)),
+                (200, reply("faq.grinding", 0.96)),
+                (200, reply("none", 0.91, quantity="1")),                 # a bare 1 ถุงค่ะ: by state
+                (200, reply("affirm", 0.9)),
+                (200, reply("faq.payment_methods", 0.7, payment="cod")),  # the question — the pending slot makes it inform
+                (200, reply("give_delivery_details", 0.98)),
+                (200, reply("change_order", 0.95, product="DH-001", quantity="2")),
+                (200, reply("affirm", 0.97)),
+                (200, reply("order_product", 0.9, product="KBN-001", quantity="2")))
+        res = r.typed("เกอิชาถุงละเท่าไหร่คะ", "t1")
+        s = r.state()
+        self.assertEqual((s.focus_sku, s.contexts), ("DH-001", {"offer_product": {"expires_after_turn": 3, "params": {"sku": "DH-001"}}}))
+        self.assertEqual(s.order["lines"], [])
+        # 2: เอาค่ะ takes the product from the context; the quantity is asked
+        res = r.typed("เอาค่ะ", "t2")
+        s = r.state()
+        self.assertEqual(s.order["lines"], [{"sku": "DH-001", "qty": None, "added_by": "customer"}])
+        self.assertEqual(res["log_entry"]["applied"], [{"set": "lines[DH-001]", "to": None, "product_from": "context:offer_product"}])
+        self.assertEqual(res["bot"][0]["text"], "รับกี่ถุงดีคะ? สั่งครบ 5 ถุงส่งฟรีน้า")
+        self.assertEqual(labels(res["bot"][0]["buttons"]), ["1 ถุง", "2 ถุง", "3 ถุง", "5 ถุง"])
+        self.assertEqual(s.contexts, {"ask_quantity": {"expires_after_turn": 4, "params": {"sku": "DH-001"}}})
+        self.assertEqual((s.pending_prompt["slot"], s.pending_prompt["context"], s.pending_prompt["params"]), ("quantity", "ask_quantity", {"sku": "DH-001"}))
+        # 3, 4: two questions interrupt; the quantity is asked again each time, the context re-armed
+        res = r.typed("ค่าส่งเท่าไหร่คะ", "t3")
+        self.assertEqual([b["response_id"] for b in res["bot"]], ["faq.shipping_fee", "resume:quantity"])
+        self.assertEqual(res["bot"][1]["text"], "รับกี่ถุงดีคะ? สั่งครบ 5 ถุงส่งฟรีน้า")           # names no product
+        self.assertEqual(labels(res["bot"][1]["buttons"]), ["1 ถุง", "2 ถุง", "3 ถุง", "5 ถุง"])
+        self.assertEqual(r.state().contexts["ask_quantity"]["expires_after_turn"], 5)
+        self.assertEqual(r.state().order["lines"][0]["qty"], None)
+        res = r.typed("ที่บ้านไม่มีเครื่องบด บดให้ได้ไหมคะ", "t4")
+        self.assertEqual(r.state().contexts["ask_quantity"]["expires_after_turn"], 6)
+        self.assertEqual(res["raw"]["request"]["state"]["awaiting"], "quantity")
+        # 5: 1 ถุงค่ะ — Jev said none; the pending slot makes it inform; the sku is the context's
+        res = r.typed("1 ถุงค่ะ", "t5")
+        s = r.state()
+        self.assertEqual((res["outcome"], res["log_entry"]["jev"]["by_state"], res["log_entry"]["jev"]["intent"]), ("matched", True, "none"))
+        self.assertEqual(res["log_entry"]["applied"], [{"set": "lines[DH-001].qty", "to": 1, "product_from": "context:ask_quantity"}])
+        self.assertEqual(s.order["lines"], [{"sku": "DH-001", "qty": 1, "added_by": "customer"}])
+        self.assertEqual((s.promos_offered, s.pending_prompt["slot"]), (["PROMO-02"], "promotion"))
+        self.assertEqual(s.contexts, {"offer_promo": {"expires_after_turn": 7, "params": {"promo_id": "PROMO-02", "effect": {"add_line": "DH-003"}}}})
+        self.assertEqual(res["bot"][0]["response_id"], "promo.offer")
+        self.assertEqual(labels(res["bot"][0]["buttons"]), ["เพิ่มเนเชอรัล แอนแอโรบิก", "ไม่เป็นไร เอาเท่าเดิม"])
+        # 6: สนใจค่ะ applies exactly the offered effect
+        res = r.typed("สนใจค่ะ", "t6")
+        s = r.state()
+        self.assertEqual(s.order["lines"], [{"sku": "DH-001", "qty": 1, "added_by": "customer"}, {"sku": "DH-003", "qty": 1, "added_by": "PROMO-02"}])
+        self.assertEqual(s.order["promo_applied"], "PROMO-02")
+        self.assertEqual(res["log_entry"]["applied"], [{"set": "lines[DH-003]", "to": 1, "product_from": "PROMO-02"}, {"set": "promo_applied", "to": "PROMO-02"}])
+        self.assertEqual([b["response_id"] for b in res["bot"]], ["promo.taken", "ask_payment"])
+        self.assertEqual(res["bot"][0]["text"], "ได้เลยค่ะ ใส่ให้แล้วนะคะ")
+        self.assertEqual(s.contexts, {"ask_payment": {"expires_after_turn": 8, "params": {}}})
+        # 7: the question carries payment cod; the pending slot fills it
+        res = r.typed("เก็บปลายทางได้ไหมคะ", "t7")
+        s = r.state()
+        self.assertEqual((res["log_entry"]["jev"]["by_state"], s.order["payment"]), (True, "cod"))
+        self.assertEqual(res["log_entry"]["applied"], [{"set": "payment", "to": "cod"}])
+        self.assertEqual(list(s.contexts), ["ask_delivery"])
+        self.assertEqual(s.contexts["ask_delivery"]["expires_after_turn"], 9)
+        self.assertEqual(res["bot"][0]["buttons"][0]["label"], "ใช้ข้อมูลตัวอย่าง")
+        # 8: the address — kept exactly, logged as [delivery details], read back, masked for Jev
+        res = r.typed(ADDRESS, "t8")
+        s = r.state()
+        self.assertEqual((res["you"]["masked"], s.order["delivery_text"]), (True, ADDRESS))
+        self.assertEqual(res["log_entry"]["input"]["text"], "[delivery details]")
+        self.assertEqual(res["log_entry"]["applied"], [{"set": "delivery_text", "to": "[kept as typed]"}])
+        rb = res["bot"][0]
+        self.assertEqual((rb["variant"], rb["response_id"]), ("read-back", "confirm"))
+        self.assertEqual(rb["readback"]["rows"], [["เกอิชา × 1 ถุง", "980 บาท"], ["เนเชอรัล แอนแอโรบิก × 1 ถุง", "520 บาท"],
+                                                   ["ส่วนลด ชุดชิมคั่วอ่อน", "−80 บาท"], ["ค่าส่ง", "100 บาท"],
+                                                   ["ค่าบริการเก็บเงินปลายทาง", "30 บาท"], ["รวม", "1,550 บาท"]])
+        self.assertEqual(rb["readback"]["delivery_text"], ADDRESS)
+        hash_a = s.contexts["confirm_order"]["params"]["order_hash"]
+        self.assertEqual(s.contexts["confirm_order"]["expires_after_turn"], 10)
+        self.assertEqual(s.last_bot_message["text_for_jev"].count(turn.MASK_FOR_JEV), 1)
+        self.assertNotIn(ADDRESS, s.last_bot_message["text_for_jev"])
+        # 9: a change names the product and the quantity: the line updated, the promotion still fits, read back again
+        res = r.typed("ขอเปลี่ยนเกอิชาเป็น 2 ถุงค่ะ", "t9")
+        s = r.state()
+        self.assertEqual(s.order["lines"], [{"sku": "DH-001", "qty": 2, "added_by": "customer"}, {"sku": "DH-003", "qty": 1, "added_by": "PROMO-02"}])
+        self.assertEqual(s.order["promo_applied"], "PROMO-02")
+        self.assertEqual(res["log_entry"]["applied"], [{"set": "lines[DH-001].qty", "to": 2, "product_from": "jev"}])
+        self.assertEqual([b["response_id"] for b in res["bot"]], ["change_order", "confirm"])
+        self.assertEqual(res["bot"][1]["readback"]["total"], 980 * 2 + 520 - 80 + 100 + 30)
+        hash_b = s.contexts["confirm_order"]["params"]["order_hash"]
+        self.assertNotEqual(hash_a, hash_b)
+        self.assertEqual(s.contexts["confirm_order"]["expires_after_turn"], 11)
+        self.assertNotIn(ADDRESS, json.dumps(res["raw"]["request"], ensure_ascii=False))
+        self.assertIn(turn.MASK_FOR_JEV, res["raw"]["request"]["state"]["shop_said"])
+        # 10: ยืนยันค่ะ confirms the order read out — hash B
+        res = r.typed("ยืนยันค่ะ", "t10")
+        s = r.state()
+        self.assertRegex(s.order["order_code"], r"^BEAN-\d{4}-\d{4}$")
+        self.assertEqual(s.order["order_code"], "BEAN-2609-0010")
+        self.assertEqual(s.order["confirmed_at"], res["log_entry"]["at"])
+        self.assertEqual(res["log_entry"]["applied"][0], {"set": "order_code", "to": "BEAN-2609-0010"})
+        self.assertEqual(res["bot"][0]["text"], "ขอบคุณคุณพี่มากค่ะ ☕ รหัสออเดอร์ BEAN-2609-0010 เตรียมชำระ 2,530 บาทตอนรับของน้า")
+        self.assertEqual(res["bot"][0]["buttons"], [{"label": "เริ่มใหม่", "intent": "start_over", "params": {}}])
+        self.assertEqual((s.contexts, s.pending_prompt, labels(s.live_buttons)), ({}, None, ["เริ่มใหม่"]))
+        # terminal: a later order intent writes nothing
+        before = json.dumps(s.order, ensure_ascii=False)
+        res = r.typed("เอาเฮาส์เบลนด์ 2 ถุงค่ะ", "t11")
+        self.assertEqual((res["outcome"], res["log_entry"]["applied"], json.dumps(r.state().order, ensure_ascii=False)), ("matched", [], before))
+        self.assertEqual(labels(res["bot"][0]["buttons"]), ["เริ่มใหม่"])
+        self.assertIn("BEAN-2609-0010", res["bot"][0]["text"])
+        # NFR10: the typed details are in delivery_text and nowhere else that leaves the session
+        s = r.state()
+        self.assertNotIn(ADDRESS, blob(s.log))
+        self.assertNotIn("081-000-0000", blob(s.log))
+        self.assertNotIn(ADDRESS, blob(turn.history(s)))
+        self.assertNotIn(ADDRESS, blob(s.last_bot_message["text_for_jev"]))
+        self.assertNotIn(ADDRESS, blob([e["request"] for tid, e in s.raw.items() if tid != "t8"]))
+        self.assertEqual(s.raw["t8"]["request"]["state"]["customer_said"], ADDRESS)     # once, on its own turn
+        self.assertNotIn(FAKE_KEY, blob(s.to_snapshot(), s.raw, res))
+        self.assertEqual(r.snapshot()["order"]["order_code"], "BEAN-2609-0010")
+        self.assertEqual(r.client.calls, 11)
+
+    def test_one_sentence_fills_three_slots(self):  # AC-2: walk § 2
+        r = Rig(self, (200, reply("order_product", 0.96, product="KBN-002", quantity="3", payment="cod")),
+                (200, reply("deny", 0.9)), (200, reply("affirm", 0.92)))
+        res = r.typed("เอาเอสเปรสโซ่คั่วเข้ม 3 ถุง เก็บปลายทางนะครับ", "t1")
+        s = r.state()
+        self.assertEqual(s.order["lines"], [{"sku": "KBN-002", "qty": 3, "added_by": "customer"}])
+        self.assertEqual((s.order["payment"], s.focus_sku), ("cod", "KBN-002"))
+        self.assertEqual(res["log_entry"]["applied"], [{"set": "lines[KBN-002].qty", "to": 3, "product_from": "jev"}, {"set": "payment", "to": "cod"}])
+        self.assertEqual(res["bot"][0]["text"], "ได้เลยค่ะ เอสเปรสโซ่คั่วเข้ม 3 ถุง เก็บเงินปลายทาง นะคะ")
+        self.assertEqual(res["bot"][1]["response_id"], "promo.offer")                   # PROMO-01: under five bags
+        self.assertEqual(s.contexts["offer_promo"]["params"], {"promo_id": "PROMO-01", "effect": {"set_qty": 5, "sku": "KBN-002"}})
+        self.assertEqual(labels(res["bot"][1]["buttons"]), ["เพิ่มเป็น 5 ถุง", "ไม่เป็นไร เอาเท่าเดิม"])
+        # a deny skips to delivery — payment is already filled
+        res = r.typed("ไม่ครับ", "t2")
+        self.assertEqual([b["response_id"] for b in res["bot"]], ["promo.declined", "ask_delivery"])
+        self.assertEqual(res["bot"][0]["text"], "ได้เลยค่ะ เอาเท่าเดิมนะคะ")
+        s = r.state()
+        self.assertEqual((s.order["promo_applied"], s.promos_offered, list(s.contexts)), (None, ["PROMO-01"], ["ask_delivery"]))
+        # the sample button fills delivery with the fictional constant; the read-back totals 1,270
+        res = r.click({"label": "ใช้ข้อมูลตัวอย่าง", "intent": "give_delivery_details", "params": {"sample": True}, "message_id": res["bot"][1]["id"]}, "c1")
+        s = r.state()
+        self.assertEqual((res["outcome"], res["you"]["kind"], res["you"]["masked"]), ("matched", "clicked", False))
+        self.assertEqual(s.order["delivery_text"], order.SAMPLE_DETAILS)
+        self.assertEqual(res["log_entry"]["applied"], [{"set": "delivery_text", "to": "[sample]"}])
+        rb = res["bot"][0]
+        self.assertEqual((rb["variant"], rb["readback"]["total"]), ("read-back", 1270))
+        self.assertEqual(rb["readback"]["rows"], [["เอสเปรสโซ่คั่วเข้ม × 3 ถุง", "1,140 บาท"], ["ค่าส่ง", "100 บาท"],
+                                                   ["ค่าบริการเก็บเงินปลายทาง", "30 บาท"], ["รวม", "1,270 บาท"]])
+        self.assertIn(order.SAMPLE_DETAILS, rb["text"])
+        res = r.typed("โอเคครับ เอาตามนี้เลย", "t3")
+        self.assertEqual(r.state().order["order_code"], "BEAN-2609-0004")
+        self.assertIn("เตรียมชำระ 1,270 บาทตอนรับของน้า", res["bot"][0]["text"])
+        self.assertEqual(r.client.calls, 3)
+
+    def test_a_question_mid_order_and_a_change_at_the_end(self):  # AC-3, AC-4: walk § 3.0–3.6
+        r = Rig(self, (200, reply("ask_recommendation", 0.95)), (200, reply("inform", 0.9, brew="filter")),
+                (200, reply("inform", 0.9, roast="light")), (200, reply("select_option", 0.8, product="DH-001")),
+                (200, reply("affirm", 0.9)), (200, reply("faq.shipping_fee", 0.97)),
+                (200, reply("inform", 0.85, quantity="1")), (200, reply("view_order", 0.9)),
+                (200, reply("change_order", 0.94, quantity="3")), (200, reply("deny", 0.9)), (200, reply("affirm", 0.97)))
+        # 3.0: the lead in the SOP's order — brew, roast, then the pair
+        r.typed("ช่วยแนะนำหน่อยค่ะ", "t1")
+        r.typed("ดริปค่ะ", "t2")
+        res = r.typed("คั่วอ่อน", "t3")
+        self.assertEqual(labels(res["bot"][0]["buttons"]), ["เกอิชา", "วอชด์ อาราบิก้า", "ดูตัวอื่น"])
+        self.assertEqual(res["log_entry"]["applied"], [{"set": "recommend.roast", "to": "light"}])
+        self.assertEqual(r.state().options_shown, ["DH-001", "MM-001"])
+        self.assertEqual(len(res["raw"]["request"]["questions"]["intent"]["criteria"]), 23)   # select_option not yet in scope
+        # 3.1: ตัวแรกค่ะ — Jev names the first product from shop_said; the card; then เอาค่ะ → the quantity
+        res = r.typed("ตัวแรกค่ะ", "t4")
+        self.assertIn("select_option", res["raw"]["request"]["questions"]["intent"]["criteria"])
+        self.assertTrue(res["bot"][0]["text"].startswith("Geisha Light Roast 200g (เกอิชา ดอยหอม) —"))
+        self.assertEqual(res["log_entry"]["applied"], [{"set": "focus_sku", "to": "DH-001", "product_from": "jev"}])
+        res = r.typed("เอาค่ะ", "t5")
+        self.assertEqual((res["outcome"], res["log_entry"]["jev"]["intent"], res["bot"][0]["response_id"]), ("matched", "affirm", "ask_quantity"))
+        # 3.2: the shipping answer, then the quantity question again; the order unchanged
+        res = r.typed("ค่าส่งเท่าไหร่คะ", "t6")
+        self.assertEqual([b["response_id"] for b in res["bot"]], ["faq.shipping_fee", "resume:quantity"])
+        self.assertEqual(res["bot"][0]["text"], "ค่าส่ง 100 บาททั่วประเทศ ส่งฟรีเมื่อสั่งครบ 5 ถุงขึ้นไป จัดส่ง 2-3 วันทำการ")
+        self.assertEqual(r.state().order["lines"], [{"sku": "DH-001", "qty": None, "added_by": "customer"}])
+        # 3.3: 1 ถุงค่ะ by state — the product from the context; the Geisha promotion offered
+        res = r.typed("1 ถุงค่ะ", "t7")
+        self.assertTrue(res["log_entry"]["jev"]["by_state"])
+        self.assertEqual(res["log_entry"]["applied"], [{"set": "lines[DH-001].qty", "to": 1, "product_from": "context:ask_quantity"}])
+        self.assertEqual(r.state().contexts["offer_promo"]["params"]["promo_id"], "PROMO-02")
+        # 3.4: view_order — the order so far as data, the promotion re-offered, the quantity not re-asked
+        res = r.typed("ตอนนี้สั่งอะไรไปบ้างคะ", "t8")
+        self.assertEqual([b["response_id"] for b in res["bot"]], ["view_order", "resume:promotion"])
+        self.assertEqual(res["bot"][0]["readback"]["rows"], [["เกอิชา × 1 ถุง", "980 บาท"], ["ค่าส่ง", "100 บาท"], ["รวม", "1,080 บาท"]])
+        self.assertEqual((res["bot"][0]["variant"], res["bot"][0]["readback"]["delivery_text"], res["bot"][0]["readback"]["tail"]), ("read-back", None, ""))
+        self.assertEqual(res["log_entry"]["applied"], [])
+        promo_id = res["bot"][1]["id"]
+        # 3.4b: the promotion, cod, the sample details — by click
+        res = r.click({"label": "เพิ่มเนเชอรัล แอนแอโรบิก", "intent": "affirm", "params": {}, "message_id": promo_id}, "c1")
+        self.assertEqual(r.state().order["promo_applied"], "PROMO-02")
+        res = r.click({"label": "เก็บเงินปลายทาง", "intent": "inform", "params": {"payment": "cod"}, "message_id": res["bot"][-1]["id"]}, "c2")
+        self.assertEqual(res["log_entry"]["applied"], [{"set": "payment", "to": "cod"}])
+        res = r.click({"label": "ใช้ข้อมูลตัวอย่าง", "intent": "give_delivery_details", "params": {"sample": True}, "message_id": res["bot"][-1]["id"]}, "c3")
+        rb = res["bot"][0]["readback"]
+        self.assertEqual(len(rb["rows"]), 6)
+        self.assertEqual(rb["rows"][2], ["ส่วนลด ชุดชิมคั่วอ่อน", "−80 บาท"])
+        self.assertEqual(rb["total"], 980 + 520 - 80 + 100 + 30)
+        s = r.state()
+        hash_a = s.contexts["confirm_order"]["params"]["order_hash"]
+        self.assertEqual(s.focus_sku, "DH-001")
+        # 3.5: a change that names no product goes to the line in focus; no line added; read back again
+        res = r.typed("ขอเปลี่ยนเป็น 3 ถุงค่ะ", "t9")
+        s = r.state()
+        self.assertEqual(s.order["lines"], [{"sku": "DH-001", "qty": 3, "added_by": "customer"}, {"sku": "DH-003", "qty": 1, "added_by": "PROMO-02"}])
+        self.assertEqual(res["log_entry"]["applied"], [{"set": "lines[DH-001].qty", "to": 3, "product_from": "focus_sku"}])
+        self.assertEqual(res["bot"][0]["text"], "ได้เลยค่ะ แก้ให้แล้วนะคะ")
+        self.assertEqual(res["bot"][1]["readback"]["total"], 980 * 3 + 520 - 80 + 100 + 30)
+        hash_b = s.contexts["confirm_order"]["params"]["order_hash"]
+        self.assertNotEqual(hash_a, hash_b)
+        # 3.5b: hesitation — asks what to change, without pressing; the order stands; the read-back's context too
+        res = r.typed("เดี๋ยวก่อนนะ ขอคิดดูก่อน", "t10")
+        s = r.state()
+        self.assertEqual(res["bot"][0]["text"], "ได้เลยค่ะ อยากแก้ส่วนไหนคะ? หรือจะคิดดูก่อนก็ได้น้า")
+        self.assertEqual(labels(res["bot"][0]["buttons"]), ["เปลี่ยนสินค้า", "เปลี่ยนจำนวน", "เปลี่ยนวิธีชำระ"])
+        self.assertEqual(len(res["bot"]), 1)
+        self.assertEqual(res["log_entry"]["applied"], [])
+        self.assertEqual(s.order["lines"][0]["qty"], 3)
+        self.assertEqual(s.contexts["confirm_order"]["params"]["order_hash"], hash_b)
+        # 3.6: a typed ยืนยันค่ะ confirms the order that was read out — hash B
+        res = r.typed("ยืนยันค่ะ", "t11")
+        self.assertEqual(r.state().order["order_code"], "BEAN-2609-0014")
+        self.assertEqual(r.client.calls, 11)
+
+    def test_a_stale_hash_reads_back_again_and_the_promotion_is_rechecked(self):  # contract § confirm_order, § promo_applied
+        r = Rig(self, (200, reply("affirm", 0.97)), (200, reply("change_order", 0.9, product="KBN-001")),
+                (200, reply("affirm", 0.97)))
+        s = r.s
+        s.order["lines"] = [{"sku": "DH-001", "qty": 1, "added_by": "customer"}, {"sku": "DH-003", "qty": 1, "added_by": "PROMO-02"}]
+        s.order["promo_applied"], s.order["payment"], s.order["delivery_text"] = "PROMO-02", "transfer", order.SAMPLE_DETAILS
+        s.promos_offered, s.focus_sku = ["PROMO-02"], "DH-001"
+        s.contexts = {"confirm_order": {"expires_after_turn": 3, "params": {"order_hash": "stale-hash"}}}
+        r.store.commit(s)
+        res = r.typed("ยืนยันค่ะ", "t1")
+        s = r.state()
+        self.assertIsNone(s.order["order_code"])                                        # not confirmed
+        self.assertEqual(res["bot"][0]["response_id"], "confirm")                        # read back again instead
+        self.assertEqual(s.contexts["confirm_order"]["params"]["order_hash"], order.order_hash(s.order))
+        self.assertEqual(res["log_entry"]["applied"], [])
+        # a change to a product not in the order replaces the focus line; PROMO-02 no longer fits and is removed, said so
+        res = r.typed("ขอเปลี่ยนเกอิชาเป็นเฮาส์เบลนด์", "t2")
+        s = r.state()
+        self.assertEqual([l["sku"] for l in s.order["lines"]], ["KBN-001", "DH-003"])
+        self.assertEqual(len(s.order["lines"]), 2)                                        # replaced, not added
+        self.assertIsNone(s.order["promo_applied"])
+        self.assertEqual(res["log_entry"]["applied"], [{"set": "lines[DH-001].sku", "to": "KBN-001", "product_from": "jev"},
+                                                       {"set": "promo_applied", "to": None, "was": "PROMO-02"}])
+        self.assertEqual(res["bot"][0]["text"], "ได้เลยค่ะ แก้ให้แล้วนะคะ โปร ชุดชิมคั่วอ่อน ไม่เข้าเงื่อนไขแล้ว แอดเอาออกให้นะคะ")
+        self.assertEqual(res["bot"][1]["response_id"], "promo.offer")                     # PROMO-03 now fits and was never offered
+        self.assertEqual(s.contexts["offer_promo"]["params"]["promo_id"], "PROMO-03")
+        res = r.typed("เอาค่ะ", "t3")
+        s = r.state()
+        self.assertEqual((s.order["lines"][0]["qty"], s.order["promo_applied"]), (6, "PROMO-03"))
+        self.assertEqual(res["bot"][-1]["response_id"], "confirm")                        # payment and delivery stand: read back
+        self.assertEqual(res["bot"][-1]["readback"]["rows"][2], ["ส่วนลด เฮาส์เบลนด์ยกลัง", "−180 บาท"])
+        self.assertEqual(res["bot"][-1]["readback"]["rows"][3], ["ค่าส่ง", "ฟรี"])
+
+    def test_cancel_clears_what_the_contract_says(self):  # AC-5: walk § 4.3
+        r = Rig(self, (200, reply("order_product", 0.93, product="KBN-001", quantity="2")), (200, reply("cancel_order", 0.96)),
+                (200, reply("view_order", 0.9)))
+        res = r.typed("เอาเฮาส์เบลนด์ 2 ถุงค่ะ", "t1")
+        s = r.state()
+        self.assertEqual(s.order["lines"], [{"sku": "KBN-001", "qty": 2, "added_by": "customer"}])
+        self.assertEqual((s.promos_offered, list(s.contexts), s.pending_prompt["slot"], s.focus_sku), (["PROMO-03"], ["offer_promo"], "promotion", "KBN-001"))
+        res = r.typed("ยกเลิกออเดอร์ค่ะ", "t2")
+        s = r.state()
+        self.assertEqual(s.order, session.empty_order())
+        self.assertEqual((s.contexts, s.focus_sku, s.pending_prompt, s.promos_offered, s.options_shown), ({}, None, None, [], []))
+        self.assertEqual(res["log_entry"]["applied"], [{"set": "order", "to": "cleared"}])
+        self.assertEqual(res["bot"][0]["text"], "ยกเลิกให้แล้วค่ะ ไม่ urgent น้า ลองดูก่อนได้ สนใจเมื่อไหร่ทักแอดได้เลยค่ะ 🙏🏻")
+        self.assertEqual(res["bot"][0]["buttons"], [{"label": "ดูเมล็ดทั้งหมด", "intent": "browse_catalog", "params": {}},
+                                                    {"label": "เริ่มใหม่", "intent": "start_over", "params": {}}])
+        self.assertEqual(len(res["bot"]), 1)                                              # it waits; no lead
+        self.assertEqual(res["log_entry"]["contexts_after"], [])
+        res = r.typed("สั่งอะไรไปบ้าง", "t3")
+        self.assertEqual((res["bot"][0]["text"], len(res["bot"])), ("ตอนนี้ยังไม่มีรายการในออเดอร์ค่ะ", 1))
+        self.assertNotIn("readback", res["bot"][0])
+        self.assertEqual(labels(res["bot"][0]["buttons"]), labels(turn.help_buttons(FLOW)))
+
+    def test_browse_promotions_and_a_pick_checked_against_the_list(self):  # walk § 2.5; contract § select_option
+        r = Rig(self, (200, reply("browse_catalog", 0.9)), (200, reply("browse_catalog", 0.9)),
+                (200, reply("select_option", 0.7)), (200, reply("select_option", 0.8, product="MM-004")),
+                (200, reply("ask_promotion", 0.9)), (200, reply("ask_promotion", 0.9)))
+        res = r.typed("ขอดูเมล็ดหน่อย", "t1")
+        self.assertEqual(labels(res["bot"][0]["buttons"]), ["ดอยหอม", "คั่วบ้านนา", "เมล็ดเมือง"])
+        self.assertTrue(res["bot"][0]["text"].startswith("ตอนนี้ Beanly มี 10 ตัวจาก 3 โรงคั่วค่ะ"))
+        # a roaster, by click or by name: its products, as select_option buttons; options_shown set
+        res = r.click({"label": "คั่วบ้านนา", "intent": "browse_catalog", "params": {}, "message_id": res["bot"][0]["id"]}, "c1")
+        self.assertEqual(labels(res["bot"][0]["buttons"]), ["เฮาส์เบลนด์", "เอสเปรสโซ่คั่วเข้ม", "ดีแคฟ"])
+        self.assertEqual([b["params"] for b in res["bot"][0]["buttons"]], [{"product": "KBN-001"}, {"product": "KBN-002"}, {"product": "KBN-003"}])
+        self.assertTrue(res["bot"][0]["text"].startswith("ของคั่วบ้านนามี 3 ตัวค่ะ\n📍 เฮาส์เบลนด์: "))
+        self.assertEqual(r.state().options_shown, ["KBN-001", "KBN-002", "KBN-003"])
+        self.assertEqual(r.state().contexts["options_shown"]["params"], {"skus": ["KBN-001", "KBN-002", "KBN-003"]})
+        res = r.typed("ของเมล็ดเมืองมีอะไรบ้าง", "t2")
+        self.assertEqual(len(res["bot"][0]["buttons"]), 4)
+        self.assertEqual(r.state().options_shown, ["MM-001", "MM-002", "MM-003", "MM-004"])
+        # a pick Jev could not resolve: the bot asks which, offering the list actually shown
+        res = r.typed("อันนั้นค่ะ", "t3")
+        self.assertEqual(res["bot"][0]["text"], turn.WHICH_PRODUCT)
+        self.assertEqual([b["params"]["product"] for b in res["bot"][0]["buttons"]], ["MM-001", "MM-002", "MM-003", "MM-004"])
+        self.assertEqual(res["log_entry"]["applied"], [])
+        self.assertIn("options_shown", r.state().contexts)
+        res = r.typed("ตัวสุดท้าย", "t4")
+        self.assertTrue(res["bot"][0]["text"].startswith("Single Origin Doi Saeng Ngoen Dark 250g (ดอยแสงเงิน คั่วเข้ม) —"))
+        self.assertEqual(r.state().focus_sku, "MM-004")
+        self.assertEqual(r.state().contexts["offer_product"]["params"], {"sku": "MM-004"})
+        # ask_promotion: the four, PROMO-05 never; on an empty order it waits
+        res = r.typed("มีโปรอะไรบ้าง", "t5")
+        self.assertEqual(len(res["bot"]), 1)
+        self.assertEqual(res["bot"][0]["text"].count("📍"), 4)
+        self.assertNotIn("ซื้อหนึ่งแถมหนึ่ง", res["bot"][0]["text"])
+        self.assertIn("📍 ส่งฟรีครบ 5 ถุง: สั่งครบ 5 ถุงขึ้นไปในออเดอร์เดียว", res["bot"][0]["text"])
+        self.assertEqual([b["intent"] for b in res["bot"][0]["buttons"]], ["ask_recommendation", "browse_catalog"])
+        # mid-order, the pending question is asked again after the list
+        s = r.state()
+        s.order["lines"] = [{"sku": "MM-004", "qty": None, "added_by": "customer"}]
+        turn.lead(s, FLOW, s.turn_no + 1)
+        r.store.commit(s)
+        res = r.typed("มีโปรอะไรบ้าง", "t6")
+        self.assertEqual([b["response_id"] for b in res["bot"]], ["ask_promotion", "resume:quantity"])
+
+    def test_f4_first_miss_after_a_faq_offers_the_help_buttons(self):  # Findings F-4, fixed here
+        r = Rig(self, (200, reply("faq.shipping_fee", 0.97)), (200, reply("none", 0.93)))
+        res = r.typed("ค่าส่งเท่าไหร่คะ", "t1")
+        self.assertEqual((res["bot"][0]["buttons"], len(res["bot"])), ([], 1))          # nothing pending: no resume, no buttons
+        self.assertEqual(r.state().live_buttons, [])
+        res = r.typed("มีหน้าร้านไหมคะ", "t2")
+        self.assertEqual((res["outcome"], res["bot"][0]["response_id"]), ("fallback", "fallback.1"))
+        self.assertEqual(labels(res["bot"][0]["buttons"]), labels(turn.help_buttons(FLOW)))
+        self.assertEqual(r.state().live_buttons, [])                                      # a miss's bubble is not live
 
 
 say = turn.say

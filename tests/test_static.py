@@ -87,7 +87,8 @@ class StaticTests(unittest.TestCase):
                        "viewer-applied", "rate", "model-status", "band-top", "band-bottom"),
         "shared.js": ("bot-${id}", "you-${youCount}", "opt-${i + 1}", "badge-clicked", "turn-${n}", "turn-${n}-intent",
                       "turn-${n}-confidence", "turn-${n}-ms", "turn-${n}-baht", "turn-${n}-usd", "turn-${n}-open",
-                      "viewer-raw-request", "viewer-raw-response"),
+                      "viewer-raw-request", "viewer-raw-response",
+                      "readback", "readback-total"),                       # Story 1.4: the ReadBack component, from server data
         "speed.js": ("speed-test-open", "speed-pop", "speed-chooser", "speed-target-100", "speed-target-1000",
                      "speed-start", "speed-test", "speed-count", "speed-target", "speed-elapsed-ms", "speed-per-s",
                      "speed-correct", "speed-errors", "speed-summary"),
@@ -134,6 +135,41 @@ class StaticTests(unittest.TestCase):
         self.assertEqual(len(s["transcript"][0]["buttons"]), 3)
         self.assertEqual(len(s["live_buttons"]), 3)
         self.assertNotIn(FAKE_KEY, html)
+
+    def test_read_back_rendered_from_server_data(self):  # Story 1.4 task 04; AC-6
+        js = self.get("/assets/shared.js")[1]
+        # the grid is built from `m.readback`, never from an order the browser keeps
+        self.assertIn("if (m.readback) b.append(...readbackNodes(m.readback))", js)
+        self.assertIn("function readbackNodes(", js)
+        self.assertNotIn("function readback(", js)
+        self.assertIn('"data-testid": "readback-total"', js)
+        self.assertIn('"data-value": rb.total', js)
+        self.assertIn('class: "readback"', js)
+        self.assertIn('"total"', js)                                  # the total row's class, bold in the design system
+        self.assertNotIn("totals(", js)
+        self.assertNotIn("PROMO-", js)
+        # the customer bubble keeps its masked mark and the clicked badge; the sample button is any button
+        self.assertIn('"data-masked": String(!!m.masked)', js)
+        self.assertIn('"data-testid": "badge-clicked"', js)
+        self.assertNotIn("ใช้ข้อมูลตัวอย่าง", js)
+        self.assertNotIn("081-000-0000", js)
+        css = self.get("/assets/design-system.css")[1]
+        self.assertIn(".readback {", css)
+        self.assertIn(".readback .total {", css)
+        self.assertIn("white-space: pre-wrap", css)                  # the tail's line break renders
+        # the server passes the bubble's `readback` through the session view unchanged
+        from app import turn
+        s = self.httpd.store.new()                                    # type: ignore[attr-defined]
+        turn.welcome(s, self.httpd.flow)                              # type: ignore[attr-defined]
+        s.order["lines"] = [{"sku": "KBN-002", "qty": 3, "added_by": "customer"}]
+        s.order["payment"], s.order["delivery_text"], s.promos_offered = "cod", "ที่อยู่สมมติ", ["PROMO-01"]
+        turn.lead(s, self.httpd.flow, 1)                              # type: ignore[attr-defined]
+        self.httpd.store.commit(s)                                    # type: ignore[attr-defined]
+        v = json.loads(self.get(f"/api/session?id={s.session_id}")[1])
+        rb = v["transcript"][-1]
+        self.assertEqual((rb["variant"], rb["readback"]["total"], rb["readback"]["rows"][-1]), ("read-back", 1270, ["รวม", "1,270 บาท"]))
+        self.assertEqual([b["label"] for b in v["live_buttons"]], ["ยืนยัน", "ขอแก้ไข"])
+        self.assertNotIn(FAKE_KEY, json.dumps(v))
 
     def test_speed_test_mounted_but_not_wired(self):
         status, js = self.get("/assets/speed.js")
