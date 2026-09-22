@@ -202,7 +202,6 @@ async function boot(opts = {}) {
   if (cfg) { CFG.rate = cfg.rate; CFG.model = cfg.model; const m = $("#model-id"); if (m && cfg.model) m.textContent = cfg.model.split("/").pop(); }
   $("#rate").textContent = cfg ? `฿${CFG.rate.thb_per_usd}/$ (${CFG.rate.date.slice(5)})` : "rate —";
   $("#rate").setAttribute("data-source", CFG.rate.source || "none");
-  $('[data-testid="band-bottom"]').append(el("div", { class: "proto-mark", text: "PROTOTYPE · FIXTURES, NOT JEV" }));
   $("#composer input")?.addEventListener("keydown", (ev) => { if (ev.key === "Enter" && !ev.shiftKey) { ev.preventDefault(); const i = ev.target; const t = i.value; i.value = ""; send(t); } });
   $("#send")?.addEventListener("click", () => { const i = $("#composer input"); const t = i.value; i.value = ""; send(t); });
   $("#start-over").addEventListener("click", startOver);
