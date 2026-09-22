@@ -9,11 +9,17 @@ exception, not into the answer, not into its repr.
 `host` and `timeout` default to OpenRouter's; `__main__.py` passes the Config's, so `JEV_HOST` can
 point the client at a dead address for the agent's rehearsal only (Story 1.6). The owner's walk never
 sets it.
+
+Story 1.3 adds `Client`: one kept-alive HTTPS connection (finding F-3 — a fresh connection cost
+939 ms against S-3's 332 on a kept-alive one), reconnected on any socket or protocol error, a lock
+around the socket, and the process's own `spent_usd` / `calls` counters that the spend cap reads.
+`ask(client=…)` and `warm_up(client=…)` go through it; without one they behave as in Story 1.2.
 """
 from __future__ import annotations
 
 import http.client
 import json
+import threading
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
@@ -59,32 +65,107 @@ def connect(host: str, timeout: float, connection=http.client.HTTPSConnection):
     return connection(host, timeout=timeout)
 
 
+def _headers(key: str) -> dict:
+    return {"Authorization": f"Bearer {key}", "Content-Type": "application/json",
+            "X-Title": "jev-scripted-chatbot"}
+
+
+def _exchange(conn, headers: dict, body: dict) -> tuple[int, dict]:
+    """One request/response on an open connection. Raises what the socket raises."""
+    payload = json.dumps(body, ensure_ascii=False).encode("utf-8")
+    conn.request("POST", PATH, body=payload, headers=headers)
+    resp = conn.getresponse()
+    raw = resp.read()
+    try:
+        data = json.loads(raw) if raw else {}
+    except ValueError:
+        data = {}
+    return resp.status, data if isinstance(data, dict) else {}
+
+
 def post(key: str, body: dict, connection=http.client.HTTPSConnection, *,
          host: str = HOST, timeout: float = TIMEOUT) -> tuple[int, dict]:
-    """One POST /api/v1/systemone. Returns (status, parsed body); status 0 when no response came."""
-    headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json",
-               "X-Title": "jev-scripted-chatbot"}
-    payload = json.dumps(body, ensure_ascii=False).encode("utf-8")
+    """One POST /api/v1/systemone on a fresh connection. Returns (status, parsed body); status 0
+    when no response came."""
     conn = connect(host, timeout, connection)
     try:
-        conn.request("POST", PATH, body=payload, headers=headers)
-        resp = conn.getresponse()
-        raw = resp.read()
-        try:
-            data = json.loads(raw) if raw else {}
-        except ValueError:
-            data = {}
-        return resp.status, data if isinstance(data, dict) else {}
+        return _exchange(conn, _headers(key), body)
     except OSError as e:  # DNS, refused, timeout — the message names the class, never the headers
         return 0, {"error": type(e).__name__}
     finally:
         conn.close()
 
 
+class Client:
+    """One kept-alive connection to OpenRouter, shared by every turn of every session (F-3).
+
+    `post(body)` sends on the open connection, opening one first when there is none. A socket or
+    protocol error closes it; when the failed connection had already served a call (the server may
+    have dropped an idle keep-alive), one retry goes out on a fresh connection before the call is
+    reported as status 0. `spent_usd` sums `usage.cost` of every response; `calls` counts every
+    attempt that reached a request, failed or not. The key lives in the headers dict only — the
+    repr shows the host and the counters.
+    """
+
+    def __init__(self, key: str, host: str = HOST, timeout: float = TIMEOUT,
+                 connection=http.client.HTTPSConnection):
+        self._headers = _headers(key)
+        self.host, self.timeout, self._connection = host, timeout, connection
+        self._conn = None
+        self._served = 0            # calls completed on the current connection
+        self._lock = threading.Lock()
+        self.spent_usd = 0.0
+        self.calls = 0
+
+    def __repr__(self) -> str:
+        return f"Client(host={self.host!r}, calls={self.calls}, spent_usd={self.spent_usd:.6f})"
+
+    def _open(self):
+        self._conn = connect(self.host, self.timeout, self._connection)
+        self._served = 0
+        return self._conn
+
+    def _drop(self) -> None:
+        if self._conn is not None:
+            try:
+                self._conn.close()
+            except OSError:
+                pass
+        self._conn, self._served = None, 0
+
+    def post(self, body: dict) -> tuple[int, dict]:
+        with self._lock:
+            self.calls += 1
+            attempts = 2 if self._conn is not None and self._served > 0 else 1
+            error = "OSError"
+            for _ in range(attempts):
+                conn = self._conn or self._open()
+                try:
+                    status, data = _exchange(conn, self._headers, body)
+                except (OSError, http.client.HTTPException) as e:
+                    error = type(e).__name__
+                    self._drop()
+                    continue
+                self._served += 1
+                usage = data.get("usage") if isinstance(data.get("usage"), dict) else {}
+                self.spent_usd += float(usage.get("cost") or 0.0)
+                return status, data
+            return 0, {"error": error}
+
+    def close(self) -> None:
+        with self._lock:
+            self._drop()
+
+
 def warm_up(key: str, connection=http.client.HTTPSConnection, *,
-            host: str = HOST, timeout: float = TIMEOUT) -> int:
-    """The throwaway first call. Prints `warm-up <status>` and returns the status (0 = no response)."""
-    status, _ = post(key, WARM_UP_BODY, connection, host=host, timeout=timeout)
+            host: str = HOST, timeout: float = TIMEOUT, client: Client | None = None) -> int:
+    """The throwaway first call. Prints `warm-up <status>` and returns the status (0 = no response).
+    Through a `client` it opens that client's kept-alive connection, so the first customer turn
+    reuses it."""
+    if client is not None:
+        status, _ = client.post(WARM_UP_BODY)
+    else:
+        status, _ = post(key, WARM_UP_BODY, connection, host=host, timeout=timeout)
     print(f"warm-up {status}", flush=True)
     return status
 
@@ -107,12 +188,16 @@ class JevAnswer:
     raw: dict = field(default_factory=dict, repr=False)   # the parsed response body, for the viewer
 
 
-def ask(key: str, body: dict, *, connection=http.client.HTTPSConnection, clock=now_utc,
-        host: str = HOST, timeout: float = TIMEOUT) -> JevAnswer:
+def ask(key: str | None, body: dict, *, connection=http.client.HTTPSConnection, clock=now_utc,
+        host: str = HOST, timeout: float = TIMEOUT, client: Client | None = None) -> JevAnswer:
     """Send one request built by `flow.build_request` and type the answer. Raises nothing for a
-    failed or malformed call: `error` says why, `intent` is None, and the stamps are still set."""
+    failed or malformed call: `error` says why, `intent` is None, and the stamps are still set.
+    With a `client` the call goes over its kept-alive connection and `key` is not used."""
     sent = clock()
-    status, data = post(key, body, connection, host=host, timeout=timeout)
+    if client is not None:
+        status, data = client.post(body)
+    else:
+        status, data = post(key or "", body, connection, host=host, timeout=timeout)
     received = clock()
     t_sent, t_received = stamp(sent), stamp(received)
     ms = _to_ms(received) - _to_ms(sent)
