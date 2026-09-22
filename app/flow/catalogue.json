@@ -1,0 +1,1262 @@
+{
+  "_note": "The predefined intent catalogue. Single source: Spike S-3 tests it, and memory/product/design/intent-catalogue.md is rendered from it. At build time this file becomes the app's flow file (spec FR18). All Thai is a draft for the owner to correct. Example phrases are the TEST SET, not training data — Jev is not trained; it reads each intent's `description`.",
+  "default_shop_said": "มีอะไรให้แอดช่วยอีกไหมคะ?",
+  "intent_question": "A customer is chatting with Beanly, an online coffee bean shop. `shop_said` is the shop's last message and `customer_said` is the customer's reply. Which one of these intents best describes what the customer wants in `customer_said`? Choose none if no intent fits.",
+  "contexts": {
+    "ask_brew": {
+      "lifespan": 2,
+      "set_when": "the bot has asked how the customer brews",
+      "brings_into_scope": [],
+      "params": "none"
+    },
+    "ask_roast": {
+      "lifespan": 2,
+      "set_when": "the bot has asked which roast the customer likes",
+      "brings_into_scope": [],
+      "params": "none"
+    },
+    "options_shown": {
+      "lifespan": 2,
+      "set_when": "the bot has just listed two to four products",
+      "brings_into_scope": [
+        "select_option"
+      ],
+      "note": "No separate position entity: S-3 run 1 showed the product question resolves 'ตัวแรก', 'อันหลัง' against shop_said by itself.",
+      "params": "{skus: [...]} — a pick is checked against the list actually shown"
+    },
+    "offer_product": {
+      "lifespan": 2,
+      "set_when": "the bot has shown one product and asked whether the customer will take it",
+      "brings_into_scope": [
+        "affirm",
+        "deny"
+      ],
+      "params": "{sku} — “เอาค่ะ” takes this product even when Jev returns not_mentioned"
+    },
+    "ask_quantity": {
+      "lifespan": 2,
+      "set_when": "the bot has asked how many bags",
+      "brings_into_scope": [],
+      "params": "{sku} — “2 ถุง” sets the quantity of this line"
+    },
+    "offer_promo": {
+      "lifespan": 2,
+      "set_when": "the bot has offered a promotion and asked whether the customer wants it",
+      "brings_into_scope": [
+        "affirm",
+        "deny"
+      ],
+      "params": "{promo_id, effect} — “สนใจค่ะ” applies exactly what was offered"
+    },
+    "ask_payment": {
+      "lifespan": 2,
+      "set_when": "the bot has asked how the customer will pay",
+      "brings_into_scope": [],
+      "params": "none"
+    },
+    "ask_delivery": {
+      "lifespan": 2,
+      "set_when": "the bot has asked for a name, address and phone number",
+      "brings_into_scope": [
+        "give_delivery_details"
+      ],
+      "params": "none"
+    },
+    "confirm_order": {
+      "lifespan": 2,
+      "set_when": "the bot has read the order back and asked the customer to confirm",
+      "brings_into_scope": [
+        "affirm",
+        "deny"
+      ],
+      "params": "{order_hash} — “ยืนยันค่ะ” confirms the order that was read out; if it changed since, it is read back again"
+    }
+  },
+  "events": {
+    "welcome": "The page opens, or the conversation starts over → the `greet` response and its buttons. No model call.",
+    "button_click": "A button fires its intent directly, with its values already known (the 2 ถุง button is `inform` with quantity 2). No model call. The click is echoed as the customer's own message.",
+    "use_sample_details": "The ใช้ข้อมูลตัวอย่าง button under `ask_delivery` → `give_delivery_details` with a fixed fictional name, address and phone."
+  },
+  "entities": {
+    "product": {
+      "instructions": "Which product from the shop's catalogue does the customer mention or clearly describe in `customer_said`? Choose not_mentioned if they do not refer to a specific product.",
+      "options_from": "product table: `{spoken_name} — {note}` per SKU",
+      "not_mentioned": "ลูกค้าไม่ได้พูดถึงสินค้าตัวใดตัวหนึ่ง"
+    },
+    "quantity": {
+      "instructions": "How many bags does the customer say they want in `customer_said`? Choose not_mentioned if they give no number of bags.",
+      "options": {
+        "1": "1 ถุง",
+        "2": "2 ถุง",
+        "3": "3 ถุง",
+        "4": "4 ถุง",
+        "5": "5 ถุง",
+        "6": "6 ถุง",
+        "more": "มากกว่า 6 ถุง"
+      },
+      "not_mentioned": "ลูกค้าไม่ได้บอกจำนวนถุงที่ต้องการ"
+    },
+    "brew": {
+      "instructions": "Which way of brewing or drinking coffee does the customer mention in `customer_said`? Choose not_mentioned if they mention none.",
+      "options": {
+        "espresso_milk": "ชงเอสเปรสโซ่ หรือทำเมนูนม เช่น ลาเต้ คาปูชิโน่",
+        "filter": "ดริป pour-over เฟรนช์เพรส โมก้าพอต หรือกาแฟดำแบบ filter",
+        "cold_brew": "โคลด์บรูว์ หรือกาแฟสกัดเย็น"
+      },
+      "not_mentioned": "ลูกค้าไม่ได้พูดถึงวิธีชง"
+    },
+    "roast": {
+      "instructions": "Which roast level, or decaf, does the customer ask for in `customer_said`? Choose not_mentioned if they mention none.",
+      "options": {
+        "light": "คั่วอ่อน",
+        "medium": "คั่วกลาง",
+        "dark": "คั่วเข้ม",
+        "decaf": "ไม่มีคาเฟอีน ดีแคฟ"
+      },
+      "not_mentioned": "ลูกค้าไม่ได้พูดถึงระดับการคั่ว"
+    },
+    "payment": {
+      "instructions": "Which payment method does the customer choose or ask to use in `customer_said`? Choose not_mentioned if they choose none.",
+      "options": {
+        "transfer": "โอนเงินผ่านบัญชีธนาคาร",
+        "cod": "เก็บเงินปลายทาง จ่ายตอนรับของ"
+      },
+      "not_mentioned": "ลูกค้าไม่ได้เลือกวิธีชำระเงิน"
+    }
+  },
+  "intents": [
+    {
+      "id": "greet",
+      "group": "conversation",
+      "scope": "global",
+      "description": "ทักทายหรือเปิดบทสนทนาเท่านั้น ยังไม่ได้ขอหรือถามอะไร",
+      "examples": [
+        {
+          "text": "สวัสดีค่ะ"
+        },
+        {
+          "text": "หวัดดีครับ"
+        },
+        {
+          "text": "ฮัลโหล มีใครอยู่ไหมคะ"
+        },
+        {
+          "text": "สวัสดีครับแอด"
+        }
+      ],
+      "response": "สวัสดีค่ะ Beanly นะคะ ☕ ขอบคุณที่ทักเข้ามาน้า วันนี้อยากให้แอดช่วยแนะนำเมล็ด หรือมีตัวที่อยากได้แล้วคะ?",
+      "source": "SOP L158, adapted",
+      "sets": [],
+      "buttons": [
+        "ช่วยแนะนำหน่อย→ask_recommendation",
+        "ดูเมล็ดทั้งหมด→browse_catalog",
+        "มีโปรอะไรบ้าง→ask_promotion"
+      ],
+      "then": "wait"
+    },
+    {
+      "id": "thanks_bye",
+      "group": "conversation",
+      "scope": "global",
+      "description": "ขอบคุณหรือบอกลา จบการสนทนา โดยไม่ได้ขออะไรเพิ่ม",
+      "examples": [
+        {
+          "text": "ขอบคุณค่ะ"
+        },
+        {
+          "text": "โอเคครับ ขอบคุณมาก ไว้ทักใหม่"
+        },
+        {
+          "text": "แค่นี้ก่อนนะคะ บาย"
+        },
+        {
+          "text": "ขอบคุณครับ เดี๋ยวกลับมาใหม่"
+        }
+      ],
+      "response": "ขอบคุณที่แวะมานะคะ 🙏🏻 ไม่ urgent น้า ลองดูก่อนได้ สนใจเมื่อไหร่ทักแอดได้เลยค่ะ",
+      "source": "SOP L458",
+      "sets": [],
+      "buttons": [
+        "เริ่มใหม่→start_over"
+      ],
+      "then": "wait"
+    },
+    {
+      "id": "help",
+      "group": "conversation",
+      "scope": "global",
+      "description": "ถามว่าแชตนี้หรือบอทนี้ช่วยอะไรได้บ้าง ทำอะไรได้ หรือใช้งานยังไง",
+      "examples": [
+        {
+          "text": "ทำอะไรได้บ้างคะ"
+        },
+        {
+          "text": "แอดช่วยอะไรได้บ้าง"
+        },
+        {
+          "text": "ใช้ยังไงครับเนี่ย"
+        },
+        {
+          "text": "นี่บอทใช่ไหม ถามอะไรได้บ้าง"
+        }
+      ],
+      "response": "แอดช่วยแนะนำเมล็ดกาแฟ บอกราคาและโปรโมชั่น ตอบเรื่องค่าส่ง การชำระเงิน การเก็บเมล็ด และรับออเดอร์ได้ค่ะ พิมพ์มาได้เลย หรือเลือกจากด้านล่างน้า",
+      "source": "written for this flow",
+      "sets": [],
+      "buttons": [
+        "ช่วยแนะนำหน่อย→ask_recommendation",
+        "ดูเมล็ดทั้งหมด→browse_catalog",
+        "มีโปรอะไรบ้าง→ask_promotion",
+        "ค่าส่งเท่าไหร่→faq.shipping_fee"
+      ],
+      "then": "wait"
+    },
+    {
+      "id": "start_over",
+      "group": "conversation",
+      "scope": "global",
+      "description": "ขอเริ่มบทสนทนาใหม่ตั้งแต่ต้น ล้างทุกอย่างแล้วเริ่มใหม่",
+      "examples": [
+        {
+          "text": "เริ่มใหม่"
+        },
+        {
+          "text": "ขอเริ่มใหม่ตั้งแต่ต้นได้ไหมคะ"
+        },
+        {
+          "text": "รีเซ็ตแชตหน่อยครับ"
+        },
+        {
+          "text": "ล้างทั้งหมดแล้วเริ่มใหม่นะ"
+        }
+      ],
+      "response": "(clears every slot and context, then the welcome message)",
+      "source": "spec FR9",
+      "sets": [],
+      "buttons": [],
+      "then": "welcome"
+    },
+    {
+      "id": "browse_catalog",
+      "group": "shopping",
+      "scope": "global",
+      "description": "อยากรู้ว่าร้านมีเมล็ดกาแฟอะไรขายบ้าง ขอดูรายการสินค้าทั้งหมด หรือดูของโรงคั่วใดโรงคั่วหนึ่ง",
+      "examples": [
+        {
+          "text": "มีกาแฟอะไรบ้างคะ"
+        },
+        {
+          "text": "ขอดูเมล็ดทั้งหมดหน่อยครับ"
+        },
+        {
+          "text": "ร้านขายอะไรบ้าง"
+        },
+        {
+          "text": "มีเมล็ดคั่วเข้มตัวไหนบ้างคะ",
+          "entities": {
+            "roast": "dark"
+          }
+        }
+      ],
+      "response": "ตอนนี้ Beanly มี 10 ตัวจาก 3 โรงคั่วค่ะ — ดอยหอม คั่วบ้านนา และเมล็ดเมือง {if a roast or brew was given: only the matching products, as a list} อยากดูของโรงคั่วไหนคะ? หรือพิมพ์ชื่อตัวที่สนใจมาได้เลยน้า",
+      "source": "product table",
+      "sets": [
+        "options_shown when four or fewer products are listed"
+      ],
+      "buttons": [
+        "ดอยหอม",
+        "คั่วบ้านนา",
+        "เมล็ดเมือง"
+      ],
+      "then": "wait"
+    },
+    {
+      "id": "ask_recommendation",
+      "group": "shopping",
+      "scope": "global",
+      "description": "ขอให้ร้านช่วยแนะนำหรือเลือกเมล็ดกาแฟให้ ยังไม่รู้ว่าจะเอาตัวไหน อาจบอกวิธีชงหรือรสที่ชอบมาด้วย",
+      "examples": [
+        {
+          "text": "ช่วยแนะนำหน่อยค่ะ"
+        },
+        {
+          "text": "แนะนำเมล็ดสำหรับทำลาเต้หน่อยครับ",
+          "entities": {
+            "brew": "espresso_milk"
+          }
+        },
+        {
+          "text": "ไม่รู้จะเลือกตัวไหนดี ชอบคั่วกลางค่ะ",
+          "entities": {
+            "roast": "medium"
+          }
+        },
+        {
+          "text": "อยากได้เมล็ดคั่วอ่อนไว้ดริป ตัวไหนดีคะ",
+          "entities": {
+            "roast": "light",
+            "brew": "filter"
+          }
+        }
+      ],
+      "response": "{if brew unknown: เยี่ยมเลยค่ะ — งั้นรบกวนถามต่ออีกนิดน้า จะได้ recommend ตรงค่ะ ปกติชงแบบไหนคะ?} {else if roast unknown: ชอบคั่วระดับไหนคะ?} {else: story bean ก่อนนะคะ — ตัวแรก {A.spoken_name}: {A.note} อีกตัว {B.spoken_name}: {B.note} สนใจตัวไหนคะ?}",
+      "source": "SOP L176, L456 · recommendation table",
+      "sets": [
+        "ask_brew, or ask_roast, or options_shown"
+      ],
+      "buttons": [
+        "(brew options) or (roast options) or (the two products + ดูตัวอื่น)"
+      ],
+      "then": "wait"
+    },
+    {
+      "id": "product_info",
+      "group": "shopping",
+      "scope": "global",
+      "description": "ถามรายละเอียดของเมล็ดกาแฟตัวใดตัวหนึ่ง เช่น รสชาติ กลิ่น เหมาะกับอะไร หรือยังมีของไหม โดยไม่ได้ถามราคา",
+      "examples": [
+        {
+          "text": "เกอิชารสชาติเป็นยังไงคะ",
+          "entities": {
+            "product": "DH-001"
+          }
+        },
+        {
+          "text": "ฮันนี่โปรเซสยังมีของไหม",
+          "entities": {
+            "product": "DH-002"
+          }
+        },
+        {
+          "text": "ตัวโคลด์บรูว์เบลนด์เป็นยังไงครับ",
+          "entities": {
+            "product": "MM-003"
+          }
+        },
+        {
+          "text": "ขอรายละเอียดพีเบอร์รี่หน่อยค่ะ",
+          "entities": {
+            "product": "MM-002"
+          }
+        }
+      ],
+      "response": "{name} — {description} ราคา {price} บาทค่ะ {if stock is 0: ตอนนี้ของหมดค่ะ ขอโทษด้วยน้า} รับตัวนี้เลยไหมคะ?",
+      "source": "product table",
+      "sets": [
+        "offer_product"
+      ],
+      "buttons": [
+        "เอาตัวนี้→affirm",
+        "ดูตัวอื่น→browse_catalog"
+      ],
+      "then": "wait"
+    },
+    {
+      "id": "ask_price",
+      "group": "shopping",
+      "scope": "global",
+      "description": "ถามราคาของเมล็ดกาแฟ ว่าถุงละเท่าไหร่ หรือราคาเท่าไหร่",
+      "examples": [
+        {
+          "text": "เกอิชาถุงละเท่าไหร่คะ",
+          "entities": {
+            "product": "DH-001"
+          }
+        },
+        {
+          "text": "เฮาส์เบลนด์ราคาเท่าไหร่",
+          "entities": {
+            "product": "KBN-001"
+          }
+        },
+        {
+          "text": "ดีแคฟกี่บาทครับ",
+          "entities": {
+            "product": "KBN-003"
+          }
+        },
+        {
+          "text": "ตัวนี้ราคาเท่าไหร่คะ",
+          "shop_said": "story bean ก่อนนะคะ — ตัวแรก เกอิชา: คั่วอ่อน · ดอกไม้ มะลิ พีช อีกตัว วอชด์ อาราบิก้า: คั่วอ่อน · ส้ม มะนาว ชาเขียว สนใจตัวไหนคะ?"
+        }
+      ],
+      "response": "{spoken_name} ถุงละ {price} บาทค่ะ ({size}) {if no product is known: ตัวไหนคะ? — then the price list by roaster}",
+      "source": "product table",
+      "sets": [
+        "offer_product when one product is named"
+      ],
+      "buttons": [
+        "เอาตัวนี้→affirm",
+        "ดูตัวอื่น→browse_catalog"
+      ],
+      "then": "wait"
+    },
+    {
+      "id": "ask_promotion",
+      "group": "shopping",
+      "scope": "global",
+      "description": "ถามว่ามีโปรโมชั่น ส่วนลด ของแถม หรือดีลพิเศษอะไรบ้าง",
+      "examples": [
+        {
+          "text": "ช่วงนี้มีโปรอะไรไหมคะ"
+        },
+        {
+          "text": "ซื้อเยอะมีส่วนลดไหมครับ"
+        },
+        {
+          "text": "มีของแถมไหม"
+        },
+        {
+          "text": "เฮาส์เบลนด์มีโปรไหมคะ",
+          "entities": {
+            "product": "KBN-001"
+          }
+        }
+      ],
+      "response": "ตอนนี้มีโปรตามนี้ค่ะ — {PROMO-01..04: title — detail, one line each; the one matching a named product first}",
+      "source": "promotion table, PROMO-01 to PROMO-04",
+      "sets": [],
+      "buttons": [
+        "ช่วยแนะนำหน่อย→ask_recommendation",
+        "ดูเมล็ดทั้งหมด→browse_catalog"
+      ],
+      "then": "lead"
+    },
+    {
+      "id": "order_product",
+      "group": "shopping",
+      "scope": "global",
+      "description": "บอกว่าจะซื้อ จะสั่ง หรือเอาเมล็ดกาแฟ อาจบอกชื่อสินค้าและจำนวนถุงมาด้วย",
+      "examples": [
+        {
+          "text": "เอาเฮาส์เบลนด์ 2 ถุงค่ะ",
+          "entities": {
+            "product": "KBN-001",
+            "quantity": "2"
+          }
+        },
+        {
+          "text": "สั่งเลยครับ"
+        },
+        {
+          "text": "อยากได้ดีแคฟ 1 ถุง สั่งยังไงคะ",
+          "entities": {
+            "product": "KBN-003",
+            "quantity": "1"
+          }
+        },
+        {
+          "text": "ขอสั่งเกอิชาหน่อยค่ะ",
+          "entities": {
+            "product": "DH-001"
+          }
+        },
+        {
+          "text": "เอาเอสเปรสโซ่คั่วเข้ม 3 ถุง เก็บปลายทางนะครับ",
+          "entities": {
+            "product": "KBN-002",
+            "quantity": "3",
+            "payment": "cod"
+          }
+        }
+      ],
+      "response": "ได้เลยค่ะ {echo of what was understood: product × quantity} — then the prompt for the first empty slot of the order",
+      "source": "order form",
+      "sets": [
+        "the context of the slot being asked"
+      ],
+      "buttons": [
+        "(of the slot being asked)"
+      ],
+      "then": "lead"
+    },
+    {
+      "id": "inform",
+      "group": "shopping",
+      "scope": "global",
+      "description": "ตอบคำถามที่ร้านเพิ่งถาม โดยให้ข้อมูลสั้นๆ เช่น จำนวนถุง วิธีชง ระดับการคั่ว หรือวิธีชำระเงิน โดยไม่ได้ขอหรือถามอย่างอื่น",
+      "examples": [
+        {
+          "text": "2 ถุงค่ะ",
+          "contexts": [
+            "ask_quantity"
+          ],
+          "shop_said": "รับกี่ถุงดีคะ? สั่งครบ 5 ถุงส่งฟรีน้า",
+          "entities": {
+            "quantity": "2"
+          }
+        },
+        {
+          "text": "ดริปค่ะ",
+          "contexts": [
+            "ask_brew"
+          ],
+          "shop_said": "ปกติชงแบบไหนคะ?",
+          "entities": {
+            "brew": "filter"
+          }
+        },
+        {
+          "text": "คั่วเข้มครับ",
+          "contexts": [
+            "ask_roast"
+          ],
+          "shop_said": "ชอบคั่วระดับไหนคะ?",
+          "entities": {
+            "roast": "dark"
+          }
+        },
+        {
+          "text": "โอนเอาค่ะ",
+          "contexts": [
+            "ask_payment"
+          ],
+          "shop_said": "ชำระแบบไหนสะดวกคะ? โอนผ่านบัญชีธนาคาร หรือเก็บเงินปลายทาง (มีค่าบริการเพิ่ม 30 บาท)",
+          "entities": {
+            "payment": "transfer"
+          }
+        },
+        {
+          "text": "เก็บปลายทางครับ",
+          "contexts": [
+            "ask_payment"
+          ],
+          "shop_said": "ชำระแบบไหนสะดวกคะ? โอนผ่านบัญชีธนาคาร หรือเก็บเงินปลายทาง (มีค่าบริการเพิ่ม 30 บาท)",
+          "entities": {
+            "payment": "cod"
+          }
+        },
+        {
+          "text": "ทำลาเต้ที่บ้านค่ะ ชอบคั่วกลาง",
+          "contexts": [
+            "ask_brew"
+          ],
+          "shop_said": "ปกติชงแบบไหนคะ?",
+          "entities": {
+            "brew": "espresso_milk",
+            "roast": "medium"
+          }
+        }
+      ],
+      "response": "(no message of its own: the values fill their slots, then the prompt for the next empty slot)",
+      "source": "slot filling",
+      "sets": [
+        "the context of the next slot asked"
+      ],
+      "buttons": [
+        "(of the slot being asked)"
+      ],
+      "then": "lead"
+    },
+    {
+      "id": "faq.shipping_fee",
+      "group": "faq",
+      "scope": "global",
+      "description": "ถามเรื่องค่าส่ง ค่าจัดส่งเท่าไหร่ ส่งฟรีไหม หรือส่งต่างจังหวัดคิดยังไง",
+      "examples": [
+        {
+          "text": "ค่าส่งเท่าไหร่คะ"
+        },
+        {
+          "text": "ส่งต่างจังหวัดคิดค่าส่งยังไงคะ"
+        },
+        {
+          "text": "ส่งฟรีไหมครับ"
+        },
+        {
+          "text": "ต้องสั่งเท่าไหร่ถึงจะส่งฟรี"
+        }
+      ],
+      "response": "{FAQ-01.answer}",
+      "source": "FAQ-01",
+      "sets": [],
+      "buttons": [],
+      "then": "resume"
+    },
+    {
+      "id": "faq.payment_methods",
+      "group": "faq",
+      "scope": "global",
+      "description": "ถามว่าจ่ายเงินได้ทางไหนบ้าง รับชำระแบบไหน หรือมีเก็บเงินปลายทางไหม โดยยังไม่ได้เลือก",
+      "examples": [
+        {
+          "text": "จ่ายเงินยังไงได้บ้าง"
+        },
+        {
+          "text": "เก็บเงินปลายทางได้ไหมคะ",
+          "accept_entities": {
+            "payment": [
+              "cod",
+              "not_mentioned"
+            ]
+          }
+        },
+        {
+          "text": "โอนเงินได้ไหม หรือมีเก็บปลายทาง"
+        },
+        {
+          "text": "รับบัตรเครดิตไหมครับ"
+        }
+      ],
+      "response": "{FAQ-02.answer}",
+      "source": "FAQ-02",
+      "sets": [],
+      "buttons": [],
+      "then": "resume"
+    },
+    {
+      "id": "faq.roast_levels",
+      "group": "faq",
+      "scope": "global",
+      "description": "ถามว่าคั่วอ่อน คั่วกลาง คั่วเข้ม ต่างกันยังไง หรือระดับการคั่วแต่ละแบบรสชาติเป็นยังไง",
+      "examples": [
+        {
+          "text": "คั่วอ่อนกับคั่วเข้มรสชาติต่างกันยังไง"
+        },
+        {
+          "text": "คั่วกลางคือแบบไหนคะ"
+        },
+        {
+          "text": "ระดับคั่วมันต่างกันยังไงครับ ไม่ค่อยเข้าใจ"
+        },
+        {
+          "text": "คั่วอ่อนจะเปรี้ยวไหมคะ"
+        }
+      ],
+      "response": "{FAQ-03.answer}",
+      "source": "FAQ-03",
+      "sets": [],
+      "buttons": [],
+      "then": "resume"
+    },
+    {
+      "id": "faq.storage",
+      "group": "faq",
+      "scope": "global",
+      "description": "ถามวิธีเก็บรักษาเมล็ดกาแฟ เก็บยังไงให้อยู่นาน ใส่ตู้เย็นได้ไหม",
+      "examples": [
+        {
+          "text": "เก็บเมล็ดกาแฟยังไงให้อยู่นาน"
+        },
+        {
+          "text": "ซื้อไปแล้วควรเก็บยังไงดี ใส่ตู้เย็นได้ไหม"
+        },
+        {
+          "text": "เปิดถุงแล้วเก็บได้นานแค่ไหนคะ"
+        },
+        {
+          "text": "ต้องเก็บในภาชนะแบบไหนครับ"
+        }
+      ],
+      "response": "{FAQ-04.answer}",
+      "source": "FAQ-04",
+      "sets": [],
+      "buttons": [],
+      "then": "resume"
+    },
+    {
+      "id": "faq.delivery_time",
+      "group": "faq",
+      "scope": "global",
+      "description": "ถามว่าสั่งแล้วกี่วันได้ของ ใช้เวลาจัดส่งนานไหม จะได้รับเมื่อไหร่",
+      "examples": [
+        {
+          "text": "สั่งแล้วได้ของกี่วัน"
+        },
+        {
+          "text": "สั่งวันนี้จะได้ของเมื่อไหร่"
+        },
+        {
+          "text": "ส่งกี่วันถึงครับ"
+        },
+        {
+          "text": "ส่งไปเชียงใหม่ใช้เวลากี่วันคะ"
+        }
+      ],
+      "response": "{FAQ-05.answer}",
+      "source": "FAQ-05",
+      "sets": [],
+      "buttons": [],
+      "then": "resume"
+    },
+    {
+      "id": "faq.grinding",
+      "group": "faq",
+      "scope": "global",
+      "description": "ถามว่าร้านบดเมล็ดให้ได้ไหม หรือไม่มีเครื่องบดทำยังไง",
+      "examples": [
+        {
+          "text": "มีบดให้ไหม"
+        },
+        {
+          "text": "ที่บ้านไม่มีเครื่องบด บดให้ได้ไหมคะ"
+        },
+        {
+          "text": "ขอแบบบดแล้วได้ไหมครับ"
+        },
+        {
+          "text": "บดสำหรับโมก้าพอตได้ไหมคะ"
+        }
+      ],
+      "response": "{FAQ-06.answer} กาแฟดีต้องคู่ grind ที่ตรงเสมอค่ะ",
+      "source": "FAQ-06 · SOP L460",
+      "sets": [],
+      "buttons": [],
+      "then": "resume"
+    },
+    {
+      "id": "faq.minimum_order",
+      "group": "faq",
+      "scope": "global",
+      "description": "ถามว่าต้องสั่งขั้นต่ำเท่าไหร่ สั่งถุงเดียวได้ไหม มีขั้นต่ำไหม",
+      "examples": [
+        {
+          "text": "ซื้อขั้นต่ำเท่าไหร่"
+        },
+        {
+          "text": "ต้องสั่งขั้นต่ำกี่ถุง"
+        },
+        {
+          "text": "สั่งถุงเดียวได้ไหมคะ",
+          "accept_entities": {
+            "quantity": [
+              "1",
+              "not_mentioned"
+            ]
+          }
+        },
+        {
+          "text": "มีขั้นต่ำในการสั่งไหมครับ"
+        }
+      ],
+      "response": "{FAQ-07.answer}",
+      "source": "FAQ-07",
+      "sets": [],
+      "buttons": [],
+      "then": "resume"
+    },
+    {
+      "id": "faq.freshness",
+      "group": "faq",
+      "scope": "global",
+      "description": "ถามว่าเมล็ดคั่วใหม่ไหม คั่วมานานหรือยัง สดไหม มีวันคั่วไหม",
+      "examples": [
+        {
+          "text": "เมล็ดคั่วใหม่ไหม"
+        },
+        {
+          "text": "เมล็ดคั่วมานานหรือยัง สดไหม"
+        },
+        {
+          "text": "บนถุงมีวันคั่วบอกไหมคะ"
+        },
+        {
+          "text": "คั่วสดทุกล็อตไหมครับ"
+        }
+      ],
+      "response": "{FAQ-08.answer}",
+      "source": "FAQ-08",
+      "sets": [],
+      "buttons": [],
+      "then": "resume"
+    },
+    {
+      "id": "view_order",
+      "group": "order",
+      "scope": "global",
+      "description": "ขอดูหรือถามว่าตอนนี้สั่งอะไรไปแล้วบ้าง ยอดรวมเท่าไหร่ ขอสรุปออเดอร์",
+      "examples": [
+        {
+          "text": "ตอนนี้สั่งอะไรไปบ้างคะ"
+        },
+        {
+          "text": "ขอดูออเดอร์หน่อยครับ"
+        },
+        {
+          "text": "ยอดรวมทั้งหมดเท่าไหร่แล้ว"
+        },
+        {
+          "text": "สรุปรายการให้หน่อยค่ะ"
+        }
+      ],
+      "response": "{the order so far, line by line, with the total in bold; or: ตอนนี้ยังไม่มีรายการในออเดอร์ค่ะ}",
+      "source": "order form · SOP L448",
+      "sets": [],
+      "buttons": [],
+      "then": "lead"
+    },
+    {
+      "id": "change_order",
+      "group": "order",
+      "scope": "global",
+      "description": "ขอแก้ไขออเดอร์ที่สั่งไว้แล้ว เช่น เปลี่ยนจำนวน เปลี่ยนสินค้า หรือเปลี่ยนวิธีชำระเงิน",
+      "examples": [
+        {
+          "text": "ขอเปลี่ยนเป็น 3 ถุงได้ไหมคะ",
+          "entities": {
+            "quantity": "3"
+          }
+        },
+        {
+          "text": "เปลี่ยนเป็นเกอิชาแทนได้ไหมครับ",
+          "entities": {
+            "product": "DH-001"
+          }
+        },
+        {
+          "text": "ขอเปลี่ยนเป็นโอนเงินแทนค่ะ",
+          "entities": {
+            "payment": "transfer"
+          }
+        },
+        {
+          "text": "ขอแก้ออเดอร์หน่อยครับ"
+        },
+        {
+          "text": "ไม่ใช่ครับ ผมสั่งเอสเปรสโซ่ ไม่ใช่เฮาส์เบลนด์",
+          "contexts": [
+            "confirm_order"
+          ],
+          "shop_said": "สรุปออเดอร์ค่ะ — เฮาส์เบลนด์ × 2 ถุง = 700 บาท ค่าส่ง 100 บาท รวม 800 บาท รบกวนคุณพี่ตรวจรายการอีกครั้ง แล้วยืนยันให้แอดน้า 🙏🏻",
+          "entities": {
+            "product": "KBN-002"
+          }
+        }
+      ],
+      "response": "ได้เลยค่ะ {what changed} {if nothing was named: อยากแก้ส่วนไหนคะ?} — then the order read back if the form is complete",
+      "source": "order form",
+      "sets": [
+        "confirm_order when the form is complete"
+      ],
+      "buttons": [
+        "เปลี่ยนสินค้า",
+        "เปลี่ยนจำนวน",
+        "เปลี่ยนวิธีชำระ"
+      ],
+      "then": "lead"
+    },
+    {
+      "id": "cancel_order",
+      "group": "order",
+      "scope": "global",
+      "description": "ขอยกเลิกออเดอร์ ไม่เอาแล้ว ไม่สั่งแล้ว",
+      "examples": [
+        {
+          "text": "ยกเลิกออเดอร์ค่ะ"
+        },
+        {
+          "text": "ไม่เอาแล้วครับ ขอยกเลิก"
+        },
+        {
+          "text": "ขอยกเลิกที่สั่งไปทั้งหมด"
+        },
+        {
+          "text": "เปลี่ยนใจแล้ว ไม่สั่งแล้วค่ะ"
+        }
+      ],
+      "response": "ยกเลิกให้แล้วค่ะ ไม่ urgent น้า ลองดูก่อนได้ สนใจเมื่อไหร่ทักแอดได้เลยค่ะ 🙏🏻",
+      "source": "SOP L458",
+      "sets": [],
+      "buttons": [
+        "ดูเมล็ดทั้งหมด→browse_catalog",
+        "เริ่มใหม่→start_over"
+      ],
+      "then": "wait"
+    },
+    {
+      "id": "affirm",
+      "group": "follow_up",
+      "scope": [
+        "offer_product",
+        "offer_promo",
+        "confirm_order"
+      ],
+      "description": "ตอบรับ ตกลง ยืนยัน หรือตอบว่าใช่ ต่อสิ่งที่ร้านเพิ่งถามหรือเสนอ",
+      "examples": [
+        {
+          "text": "ยืนยันค่ะ",
+          "contexts": [
+            "confirm_order"
+          ],
+          "shop_said": "สรุปออเดอร์ค่ะ — เฮาส์เบลนด์ × 2 ถุง = 700 บาท ค่าส่ง 100 บาท รวม 800 บาท รบกวนคุณพี่ตรวจรายการอีกครั้ง แล้วยืนยันให้แอดน้า 🙏🏻"
+        },
+        {
+          "text": "โอเคครับ เอาตามนี้เลย",
+          "contexts": [
+            "confirm_order"
+          ],
+          "shop_said": "สรุปออเดอร์ค่ะ — เฮาส์เบลนด์ × 2 ถุง = 700 บาท ค่าส่ง 100 บาท รวม 800 บาท รบกวนคุณพี่ตรวจรายการอีกครั้ง แล้วยืนยันให้แอดน้า 🙏🏻"
+        },
+        {
+          "text": "เอาค่ะ",
+          "contexts": [
+            "offer_product"
+          ],
+          "shop_said": "เฮาส์เบลนด์ — คั่วกลาง ช็อกโกแลต คาราเมล ราคา 350 บาทค่ะ รับตัวนี้เลยไหมคะ?",
+          "accept_entities": {
+            "product": [
+              "KBN-001",
+              "not_mentioned"
+            ]
+          }
+        },
+        {
+          "text": "สนใจค่ะ เพิ่มเป็น 5 ถุงเลย",
+          "contexts": [
+            "offer_promo"
+          ],
+          "shop_said": "สั่งครบ 5 ถุงขึ้นไปในออเดอร์เดียว ส่งฟรีทั่วประเทศ สนใจไหมคะ? ไม่ urgent น้า ลองดูก่อนได้",
+          "entities": {
+            "quantity": "5"
+          }
+        },
+        {
+          "text": "ได้เลยค่ะ",
+          "contexts": [
+            "offer_promo"
+          ],
+          "shop_said": "ซื้อเฮาส์เบลนด์ 6 ถุงขึ้นไป ลดถุงละ 30 บาท สนใจไหมคะ? ไม่ urgent น้า ลองดูก่อนได้"
+        }
+      ],
+      "response": "(depends on the context: offer_product → the product is taken, ask quantity · offer_promo → the promotion is applied · confirm_order → ขอบคุณคุณพี่มากค่ะ ☕ รหัสออเดอร์ {BEAN-YYMM-####} …)",
+      "source": "SOP L120, L319, L355",
+      "sets": [
+        "the context of the next slot asked; none after confirm_order"
+      ],
+      "buttons": [
+        "(of the slot being asked) · เริ่มใหม่ after the order is confirmed"
+      ],
+      "then": "lead"
+    },
+    {
+      "id": "deny",
+      "group": "follow_up",
+      "scope": [
+        "offer_product",
+        "offer_promo",
+        "confirm_order"
+      ],
+      "description": "ปฏิเสธ ไม่เอา ยังไม่ตกลง หรือขอคิดดูก่อน ต่อสิ่งที่ร้านเพิ่งถามหรือเสนอ โดยไม่ได้บอกว่าจะแก้อะไร",
+      "examples": [
+        {
+          "text": "ไม่เป็นไรค่ะ เอาเท่าเดิม",
+          "contexts": [
+            "offer_promo"
+          ],
+          "shop_said": "สั่งครบ 5 ถุงขึ้นไปในออเดอร์เดียว ส่งฟรีทั่วประเทศ สนใจไหมคะ? ไม่ urgent น้า ลองดูก่อนได้"
+        },
+        {
+          "text": "ยังไม่เอาค่ะ",
+          "contexts": [
+            "offer_product"
+          ],
+          "shop_said": "เกอิชา — คั่วอ่อน ดอกไม้ มะลิ พีช ราคา 980 บาทค่ะ รับตัวนี้เลยไหมคะ?"
+        },
+        {
+          "text": "เดี๋ยวก่อนนะ ขอคิดดูก่อน",
+          "contexts": [
+            "confirm_order"
+          ],
+          "shop_said": "สรุปออเดอร์ค่ะ — เฮาส์เบลนด์ × 2 ถุง = 700 บาท ค่าส่ง 100 บาท รวม 800 บาท รบกวนคุณพี่ตรวจรายการอีกครั้ง แล้วยืนยันให้แอดน้า 🙏🏻"
+        },
+        {
+          "text": "ไม่ครับ",
+          "contexts": [
+            "offer_promo"
+          ],
+          "shop_said": "ซื้อดีแคฟ 2 ถุง แถมถุงผ้าดริปพร้อมชง 1 ใบ สนใจไหมคะ? ไม่ urgent น้า ลองดูก่อนได้"
+        }
+      ],
+      "response": "(depends on the context: offer_product → ได้ค่ะ ลองดูตัวอื่นไหมคะ? · offer_promo → ได้เลยค่ะ เอาเท่าเดิมนะคะ, then the next slot · confirm_order → ได้เลยค่ะ อยากแก้ส่วนไหนคะ? หรือจะคิดดูก่อนก็ได้น้า)",
+      "source": "SOP L458",
+      "sets": [
+        "options_shown, or the next slot's context"
+      ],
+      "buttons": [
+        "(by context)"
+      ],
+      "then": "lead"
+    },
+    {
+      "id": "select_option",
+      "group": "follow_up",
+      "scope": [
+        "options_shown"
+      ],
+      "description": "เลือกตัวใดตัวหนึ่งจากรายการที่ร้านเพิ่งแสดง โดยบอกลำดับ เช่น ตัวแรก ตัวที่สอง หรือบอกชื่อตัวที่อยู่ในรายการ",
+      "examples": [
+        {
+          "text": "ตัวแรกค่ะ",
+          "contexts": [
+            "options_shown"
+          ],
+          "shop_said": "story bean ก่อนนะคะ — ตัวแรก เกอิชา: คั่วอ่อน · ดอกไม้ มะลิ พีช อีกตัว วอชด์ อาราบิก้า: คั่วอ่อน · ส้ม มะนาว ชาเขียว สนใจตัวไหนคะ?",
+          "entities": {
+            "product": "DH-001"
+          }
+        },
+        {
+          "text": "เอาตัวที่สองครับ",
+          "contexts": [
+            "options_shown"
+          ],
+          "shop_said": "story bean ก่อนนะคะ — ตัวแรก เฮาส์เบลนด์: คั่วกลาง · ช็อกโกแลต คาราเมล อีกตัว ฮันนี่โปรเซส: คั่วกลาง · โกโก้ น้ำผึ้ง ผลไม้สุก สนใจตัวไหนคะ?",
+          "entities": {
+            "product": "DH-002"
+          }
+        },
+        {
+          "text": "สนใจวอชด์ อาราบิก้าค่ะ",
+          "contexts": [
+            "options_shown"
+          ],
+          "shop_said": "story bean ก่อนนะคะ — ตัวแรก เกอิชา: คั่วอ่อน · ดอกไม้ มะลิ พีช อีกตัว วอชด์ อาราบิก้า: คั่วอ่อน · ส้ม มะนาว ชาเขียว สนใจตัวไหนคะ?",
+          "entities": {
+            "product": "MM-001"
+          }
+        },
+        {
+          "text": "อันหลังดีกว่า",
+          "contexts": [
+            "options_shown"
+          ],
+          "shop_said": "story bean ก่อนนะคะ — ตัวแรก เอสเปรสโซ่คั่วเข้ม: คั่วเข้ม · ดาร์กช็อกโกแลต อีกตัว ดอยแสงเงิน: คั่วเข้ม · โกโก้เข้ม ยาสูบ สนใจตัวไหนคะ?",
+          "entities": {
+            "product": "MM-004"
+          }
+        }
+      ],
+      "response": "(the product card of the chosen one — as product_info)",
+      "source": "product table",
+      "sets": [
+        "offer_product"
+      ],
+      "buttons": [
+        "เอาตัวนี้→affirm",
+        "ดูตัวอื่น→browse_catalog"
+      ],
+      "then": "wait"
+    },
+    {
+      "id": "give_delivery_details",
+      "group": "follow_up",
+      "scope": [
+        "ask_delivery"
+      ],
+      "description": "ให้ชื่อ ที่อยู่ หรือเบอร์โทรสำหรับจัดส่ง",
+      "examples": [
+        {
+          "text": "สมชาย ใจดี 123/4 ซอยสุขุมวิท 50 คลองเตย กรุงเทพ 10110 โทร 081-000-0000",
+          "contexts": [
+            "ask_delivery"
+          ],
+          "shop_said": "รบกวนขอชื่อ ที่อยู่ และเบอร์โทรสำหรับจัดส่งค่ะ — เดโมนี้ไม่ส่งของจริง ใช้ข้อมูลสมมติได้เลยน้า"
+        },
+        {
+          "text": "ส่งที่ 99 หมู่ 1 ต.ช้างเผือก อ.เมือง เชียงใหม่ 50300 ค่ะ ชื่อมานี",
+          "contexts": [
+            "ask_delivery"
+          ],
+          "shop_said": "รบกวนขอชื่อ ที่อยู่ และเบอร์โทรสำหรับจัดส่งค่ะ — เดโมนี้ไม่ส่งของจริง ใช้ข้อมูลสมมติได้เลยน้า"
+        },
+        {
+          "text": "คุณปิติ 55 ถ.นิมมานเหมินท์ เชียงใหม่ 080-000-0000",
+          "contexts": [
+            "ask_delivery"
+          ],
+          "shop_said": "รบกวนขอชื่อ ที่อยู่ และเบอร์โทรสำหรับจัดส่งค่ะ — เดโมนี้ไม่ส่งของจริง ใช้ข้อมูลสมมติได้เลยน้า"
+        }
+      ],
+      "response": "(the details are stored exactly as typed, then the order is read back)",
+      "source": "SOP stage 8 fields",
+      "sets": [
+        "confirm_order"
+      ],
+      "buttons": [
+        "ยืนยัน→affirm",
+        "ขอแก้ไข→change_order"
+      ],
+      "then": "lead"
+    }
+  ],
+  "fallback": {
+    "id": "none",
+    "description": "ไม่ตรงกับ intent ใดเลย หรือเป็นเรื่องที่ร้านไม่มีคำตอบเตรียมไว้",
+    "ladder": [
+      "ขอโทษด้วยน้า แอดยังจับไม่ได้ว่าหมายถึงแบบไหน ลองพิมพ์อีกครั้งได้ไหมคะ?",
+      "ขอโทษด้วยน้า แอดยังไม่เข้าใจค่ะ ลองเลือกจากด้านล่างดูไหมคะ — then the help buttons"
+    ],
+    "examples": [
+      {
+        "text": "วันนี้ฝนตกไหมคะ"
+      },
+      {
+        "text": "มีหน้าร้านไหมคะ"
+      },
+      {
+        "text": "รับสมัครพนักงานไหมครับ"
+      },
+      {
+        "text": "ขอเบอร์โทรร้านหน่อย"
+      },
+      {
+        "text": "asdfgh"
+      }
+    ]
+  },
+  "multi_slot_and_hard_cases": [
+    {
+      "text": "เอาเกอิชา 1 ถุงค่ะ โอนเงินนะคะ",
+      "intent": "order_product",
+      "entities": {
+        "product": "DH-001",
+        "quantity": "1",
+        "payment": "transfer"
+      }
+    },
+    {
+      "text": "ขอพีเบอร์รี่ 2 ถุง",
+      "intent": "order_product",
+      "entities": {
+        "product": "MM-002",
+        "quantity": "2"
+      }
+    },
+    {
+      "text": "อยากได้เมล็ดสำหรับทำโคลด์บรูว์ 2 ถุงครับ",
+      "intent": "order_product",
+      "entities": {
+        "product": "MM-003",
+        "quantity": "2",
+        "brew": "cold_brew"
+      },
+      "accept_intents": [
+        "order_product",
+        "ask_recommendation"
+      ]
+    },
+    {
+      "text": "มีแบบไม่มีคาเฟอีนไหมคะ",
+      "intent": "browse_catalog",
+      "entities": {
+        "roast": "decaf"
+      },
+      "accept_intents": [
+        "browse_catalog",
+        "ask_recommendation",
+        "product_info"
+      ],
+      "accept_entities": {
+        "product": [
+          "KBN-003",
+          "not_mentioned"
+        ]
+      }
+    },
+    {
+      "text": "ค่าส่งเท่าไหร่คะ",
+      "contexts": [
+        "ask_quantity"
+      ],
+      "shop_said": "รับกี่ถุงดีคะ? สั่งครบ 5 ถุงส่งฟรีน้า",
+      "intent": "faq.shipping_fee",
+      "entities": {}
+    },
+    {
+      "text": "เก็บปลายทางได้ไหมคะ",
+      "contexts": [
+        "ask_payment"
+      ],
+      "shop_said": "ชำระแบบไหนสะดวกคะ? โอนผ่านบัญชีธนาคาร หรือเก็บเงินปลายทาง (มีค่าบริการเพิ่ม 30 บาท)",
+      "intent": "faq.payment_methods",
+      "entities": {},
+      "accept_intents": [
+        "faq.payment_methods",
+        "inform"
+      ],
+      "accept_entities": {
+        "payment": [
+          "cod",
+          "not_mentioned"
+        ]
+      }
+    },
+    {
+      "text": "ขอเปลี่ยนเป็น 3 ถุงค่ะ",
+      "contexts": [
+        "confirm_order"
+      ],
+      "shop_said": "สรุปออเดอร์ค่ะ — เฮาส์เบลนด์ × 2 ถุง = 700 บาท ค่าส่ง 100 บาท รวม 800 บาท รบกวนคุณพี่ตรวจรายการอีกครั้ง แล้วยืนยันให้แอดน้า 🙏🏻",
+      "intent": "change_order",
+      "entities": {
+        "quantity": "3"
+      },
+      "accept_entities": {
+        "product": [
+          "KBN-001",
+          "not_mentioned"
+        ]
+      }
+    },
+    {
+      "text": "ใช่ค่ะ ถูกต้อง",
+      "contexts": [
+        "confirm_order"
+      ],
+      "shop_said": "สรุปออเดอร์ค่ะ — เกอิชา × 1 ถุง = 980 บาท ค่าส่ง 100 บาท รวม 1,080 บาท รบกวนคุณพี่ตรวจรายการอีกครั้ง แล้วยืนยันให้แอดน้า 🙏🏻",
+      "intent": "affirm",
+      "entities": {}
+    },
+    {
+      "text": "ขอบคุณค่ะ แล้วบดให้ด้วยได้ไหมคะ",
+      "intent": "faq.grinding",
+      "entities": {}
+    },
+    {
+      "text": "เอสเปรสโซ่คั่วเข้มกับดอยแสงเงินต่างกันยังไงครับ",
+      "intent": "product_info",
+      "entities": {},
+      "accept_entities": {
+        "product": [
+          "KBN-002",
+          "MM-004",
+          "not_mentioned"
+        ],
+        "roast": [
+          "dark",
+          "not_mentioned"
+        ]
+      }
+    },
+    {
+      "text": "6 ถุงเลยค่ะ ได้ส่วนลดใช่ไหม",
+      "contexts": [
+        "ask_quantity"
+      ],
+      "shop_said": "รับกี่ถุงดีคะ? สั่งครบ 5 ถุงส่งฟรีน้า",
+      "intent": "inform",
+      "entities": {
+        "quantity": "6"
+      },
+      "accept_intents": [
+        "inform",
+        "ask_promotion",
+        "order_product"
+      ]
+    },
+    {
+      "text": "ไม่เอาแล้วค่ะ ขอดูตัวอื่น",
+      "contexts": [
+        "offer_product"
+      ],
+      "shop_said": "เกอิชา — คั่วอ่อน ดอกไม้ มะลิ พีช ราคา 980 บาทค่ะ รับตัวนี้เลยไหมคะ?",
+      "intent": "deny",
+      "entities": {},
+      "accept_intents": [
+        "deny",
+        "browse_catalog"
+      ]
+    }
+  ],
+  "_revision": "Run 2 (2026-09-22): the `ordinal` entity removed; four select_option cases now expect the product Jev resolves from shop_said; four cases accept a value that the sentence does mention inside a question or that is resolved from shop_said. No intent description was reworded."
+}
