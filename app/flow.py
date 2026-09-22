@@ -41,6 +41,43 @@ class Flow:
         """S-1's `thai_criteria()["product"]`: `{sku: "spoken_name — note"}`, straight from the table."""
         return {sku: f'{p["spoken_name"]} — {p["note"]}' for sku, p in self.products.items()}
 
+    # --- the request, as Spike S-3 proved it (run_intents.py § in_scope / entity_questions / build_body)
+
+    def in_scope(self, contexts: list[str]) -> list[dict]:
+        """The global intents plus those any live context brings in, in catalogue order."""
+        live = set(contexts)
+        return [it for it in self.intents if it["scope"] == "global" or set(it["scope"]) & live]
+
+    def questions(self, contexts: list[str]) -> dict[str, dict]:
+        """The five entity questions — the same every turn. An entity with `only_in_context` is asked
+        only under that context (S-3's rule; the catalogue has none today). `not_mentioned` is always
+        an option; the product options come from the table."""
+        qs = {}
+        for name, e in self.entities.items():
+            if e.get("only_in_context") and e["only_in_context"] not in contexts:
+                continue
+            opts = self.product_options() if name == "product" else dict(e["options"])
+            opts["not_mentioned"] = e["not_mentioned"]
+            qs[name] = {"type": "choice", "instructions": e["instructions"], "criteria": opts}
+        return qs
+
+    def build_request(self, shop_said: str | None, customer_said: str, awaiting: str | None,
+                      history: list[dict], contexts: list[str]) -> dict:
+        """The body of one call: `{model, state, questions}`. `state` carries exactly `shop_said`
+        (the default when None), `customer_said`, `awaiting` (the slot the bot waits for, or None) and
+        `history` — passed through as given; Story 1.3 masks it before it gets here. The intent
+        question's options are the intents in scope plus `none`."""
+        crit = {it["id"]: it["description"] for it in self.in_scope(contexts)}
+        crit[self.fallback["id"]] = self.fallback["description"]
+        qs = {"intent": {"type": "choice", "instructions": self.intent_question, "criteria": crit}}
+        qs.update(self.questions(contexts))
+        return {"model": self.model,
+                "state": {"shop_said": shop_said or self.default_shop_said,
+                          "customer_said": customer_said,
+                          "awaiting": awaiting,
+                          "history": list(history)},
+                "questions": qs}
+
 
 def load(catalogue: Path = CATALOGUE, data: Path = DATA) -> Flow:
     """Read the flow file and the product table once. Raises like `open`/`json` would; prints nothing."""
