@@ -91,7 +91,7 @@ function status(r) {
   const st = $("#key-status"); if (!st) return;
   if (r.outcome === "model_failed") st.textContent = `● unreachable · ${r.log_entry?.jev?.error || "no answer"}`;
   else if (r.outcome === "cap_reached") st.textContent = "● spend cap reached";
-  else if (r.model_status === "live") st.textContent = "";   // the model answered — cleared
+  else if (r.model_status === "live" && r.log_entry?.jev) st.textContent = "";   // the model answered a call — cleared (a click makes none)
 }
 /* The server itself could not be reached, or the session it was asked about is gone: an unknown
    or expired id is "a new session, as if the page had just opened" (session-state.md). */
