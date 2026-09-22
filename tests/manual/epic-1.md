@@ -10,8 +10,8 @@ updated: 2026-09-22
 
 ## Read this first
 
-The walker is the **owner**, as the customer in §§ 1–4 and as the presenter in § 5 (the speed
-test is started from CU-1's screen; its journey page is PR-1). Written before the build, from the flow page
+The walker is the **owner**, as the customer. **This is a chat test only** (owner ruling): the speed
+test belongs to Epic 2, the video, and is not walked here. Written before the build, from the flow page
 [[CU-1]] and the Loop 2c walk records (`prototypes/walks/`), whose control labels and landings were
 proven in a browser against the prototype.
 
@@ -35,9 +35,6 @@ until then this section names what the build must make true. Paths are absolute.
   else lives there) and confirms `OPENROUTER_API_KEY` is present in
   `/Users/dong/src/gig_demo/Scripted-Chatbot-with-Jev/.env` **without printing it**. It also runs
   the two measurements below (0.a, 0.b) and reads them out.
-* **Operator controls, exempt from the surface rule** (like the cold start itself): the model
-  address override that § 4 uses to make Jev unreachable is an operator setting, defined by
-  Story 1.2; the agent flips it on the walker's say-so and says so in the row.
 * **You run, in your own terminal**:
   `cd /Users/dong/src/gig_demo/Scripted-Chatbot-with-Jev && python3.11 -m app` *(the exact command
   is filled by Story 1.1; this is the shape)*. It refuses to start without a key, makes its warm-up
@@ -53,9 +50,8 @@ until then this section names what the build must make true. Paths are absolute.
 
 | Hazard | What goes wrong |
 |---|---|
-| Every typed turn and every speed-test message is a paid call to Jev | Spend counts against the owner's $1.00 cap; a 1,000 run costs about $0.16. § 5 at 100 costs about $0.016 |
-| The speed test at 1,000 | Only when the owner says so; § 5 runs at **100** |
-| The spend cap | Cannot be walked without spending the cap. The cap's behaviour (typed turns pause, Start refused with the room left) is proven in Story 1.7's rehearsal with a **temporarily lowered cap**, recorded in the dry-walk file — stated here so it is not mistaken for walked |
+| Every typed turn is a paid call to Jev | About 16 typed turns in this walk ≈ $0.003 against the owner's $1.00 cap |
+| Jev unreachable (E-002), the spend cap, expiry | Not walked by the owner. Proven by the agent in Story 1.6's rehearsal — a dead address for one turn, a lowered cap, a shortened timeout — recorded in the dry-walk file. Stated here so they are not mistaken for walked |
 | Jev's API can return empty answers (S-3 saw 57 in a row) | The turn shows MODEL FAILED and nothing else changes; that is the designed behaviour, not a finding — unless the order changed |
 
 ## § 1 — The bot leads: greeting to a confirmed order
@@ -113,7 +109,7 @@ reads `— · ฿0.000 · 0`, no panel rows.
 | 3.5b | 👤 🌐 Type **เดี๋ยวก่อนนะ ขอคิดดูก่อน** | composer | `deny` under the read-back: Beanly asks what to change, without pressing; the order stands (CU-1's hesitation branch) |
 | 3.6 | 👤 🌐 Click **ยืนยัน** | the page | Order code |
 
-## § 4 — When Jev does not understand, and when it is unreachable
+## § 4 — When Jev does not understand
 
 **Preconditions as data:** a fresh session.
 
@@ -123,25 +119,7 @@ reads `— · ฿0.000 · 0`, no panel rows.
 |---|---|---|---|
 | 4.1 | 👤 🌐 Type **มีหน้าร้านไหมคะ** | composer | A **FALLBACK** row (intent `none` or a low-confidence pick, shown); Beanly apologises and shows the same buttons; nothing else changes |
 | 4.2 | 👤 🌐 Type **รับสมัครพนักงานไหมครับ** | composer | The second apology and the help buttons |
-| 4.3 | 🤖 💻 Agent flips the operator control that makes Jev unreachable (§ 0), on the walker's say-so | the operator control Story 1.2 defines | *(an operator control, exempt like the cold start)* |
-| 4.4 | 👤 🌐 Type anything, then click any live button | composer, the page | A **MODEL FAILED · HTTP …** row at ฿0; Beanly says it cannot reach the model; key-info shows `● unreachable`; the click works — no model needed |
-| 4.6 | 🤖 💻 Agent restores the address; 👤 types again | composer | A normal row; the `unreachable` line is gone |
-| 4.7 | 👤 🌐 Type **เอาเฮาส์เบลนด์ 2 ถุงค่ะ**, then **ยกเลิกออเดอร์ค่ะ** | composer | A line is added, then `cancel_order` clears it: Beanly confirms, no order remains, the greeting-style buttons return (FR24) |
-
-## § 5 — The speed test, at 100
-
-**Preconditions as data:** a fresh session. **Target 100** — the owner's rule for rehearsal;
-1,000 only when the owner says so.
-
-`Executed: [ ]  ·  Result: [ ]`
-
-| Step | Action | Command / Where | Expected |
-|---|---|---|---|
-| 5.1 | 👤 🌐 Click **speed test ▾** | header | A popover: **100 rehearsal** preselected · 1,000 demo · Start. The screen otherwise unchanged |
-| 5.2 | 👤 🌐 Click **Start** | popover | Messages stream **as chat** — customer bubbles and Beanly's replies — with panel rows beside them; a status line above the composer counts; the key-info block counts. It looks like the chat, very fast |
-| 5.3 | 👤 🌐 Watch it finish | the page | Under 2 s (S-4: 79/s); the status line holds `100 answered in … s · …/s · N correct`, with N ≥ 90 (S-4 measured 97.3%; FR26 shows the share); key-info at 100 turns and a cost of 100 × ≈$0.000165 × the rate |
-| 5.4 | 🤖 💻 Measure: every one of the 100 is in the log with millisecond timestamps, committed in order | `cd /Users/dong/src/gig_demo/Scripted-Chatbot-with-Jev && python3 -c "import json,glob,os;f=max(glob.glob('var/sessions/*.json'),key=os.path.getmtime);d=json.load(open(f));L=[e for e in d['log'] if e.get('batch')];print(len(L),L[-1]['jev']['t_sent'],L[-1]['jev']['t_received'],[e['turn_no'] for e in L]==sorted(e['turn_no'] for e in L))"` | `100 <ISO ms> <ISO ms> True` |
-| 5.5 | 👤 🌐 Click **เริ่มใหม่** | header | Greeting; key-info at zero; status line gone |
+| 4.3 | 👤 🌐 Type **เอาเฮาส์เบลนด์ 2 ถุงค่ะ**, then **ยกเลิกออเดอร์ค่ะ** | composer | A line is added, then `cancel_order` clears it: Beanly confirms, no order remains, the greeting-style buttons return (FR24) |
 
 ## Findings
 
