@@ -1,0 +1,2570 @@
+{
+ "_note": "Prototype fixtures. `jev` holds REAL answers Jev gave in Spike S-3 run 2 (results/flat_20260922_063433.json) keyed by the exact phrase; anything else typed gets the fallback. products/faq/promotions are the owner's tables verbatim. intents are the catalogue's responses and buttons.",
+ "jev": {
+  "สวัสดีค่ะ": {
+   "intent": "greet",
+   "confidence": 0.99,
+   "entities": {},
+   "ms": 339,
+   "cost": 0.00016086,
+   "contexts": [],
+   "expected": "greet",
+   "probs": {
+    "greet": 1,
+    "change_order": 0,
+    "view_order": 0,
+    "ask_promotion": 0,
+    "order_product": 0
+   }
+  },
+  "หวัดดีครับ": {
+   "intent": "greet",
+   "confidence": 1,
+   "entities": {},
+   "ms": 363,
+   "cost": 0.000160902,
+   "contexts": [],
+   "expected": "greet",
+   "probs": {
+    "greet": 1,
+    "ask_promotion": 0,
+    "faq.freshness": 0,
+    "start_over": 0,
+    "browse_catalog": 0
+   }
+  },
+  "ฮัลโหล มีใครอยู่ไหมคะ": {
+   "intent": "greet",
+   "confidence": 0.95,
+   "entities": {},
+   "ms": 317,
+   "cost": 0.000161364,
+   "contexts": [],
+   "expected": "greet",
+   "probs": {
+    "greet": 0.96,
+    "none": 0.03,
+    "help": 0.01,
+    "change_order": 0,
+    "ask_price": 0
+   }
+  },
+  "สวัสดีครับแอด": {
+   "intent": "greet",
+   "confidence": 1,
+   "entities": {},
+   "ms": 360,
+   "cost": 0.000161028,
+   "contexts": [],
+   "expected": "greet",
+   "probs": {
+    "greet": 1,
+    "faq.roast_levels": 0,
+    "start_over": 0,
+    "view_order": 0,
+    "none": 0
+   }
+  },
+  "ขอบคุณค่ะ": {
+   "intent": "thanks_bye",
+   "confidence": 1,
+   "entities": {},
+   "ms": 336,
+   "cost": 0.00016086,
+   "contexts": [],
+   "expected": "thanks_bye",
+   "probs": {
+    "thanks_bye": 1,
+    "faq.delivery_time": 0,
+    "start_over": 0,
+    "product_info": 0,
+    "ask_price": 0
+   }
+  },
+  "โอเคครับ ขอบคุณมาก ไว้ทักใหม่": {
+   "intent": "thanks_bye",
+   "confidence": 1,
+   "entities": {},
+   "ms": 303,
+   "cost": 0.0001617,
+   "contexts": [],
+   "expected": "thanks_bye",
+   "probs": {
+    "thanks_bye": 1,
+    "product_info": 0,
+    "greet": 0,
+    "order_product": 0,
+    "faq.roast_levels": 0
+   }
+  },
+  "แค่นี้ก่อนนะคะ บาย": {
+   "intent": "thanks_bye",
+   "confidence": 1,
+   "entities": {},
+   "ms": 295,
+   "cost": 0.000161238,
+   "contexts": [],
+   "expected": "thanks_bye",
+   "probs": {
+    "thanks_bye": 1,
+    "faq.minimum_order": 0,
+    "view_order": 0,
+    "ask_promotion": 0,
+    "order_product": 0
+   }
+  },
+  "ขอบคุณครับ เดี๋ยวกลับมาใหม่": {
+   "intent": "thanks_bye",
+   "confidence": 1,
+   "entities": {},
+   "ms": 350,
+   "cost": 0.000161616,
+   "contexts": [],
+   "expected": "thanks_bye",
+   "probs": {
+    "thanks_bye": 1,
+    "faq.delivery_time": 0,
+    "ask_recommendation": 0,
+    "order_product": 0,
+    "none": 0
+   }
+  },
+  "ทำอะไรได้บ้างคะ": {
+   "intent": "help",
+   "confidence": 1,
+   "entities": {},
+   "ms": 351,
+   "cost": 0.000161112,
+   "contexts": [],
+   "expected": "help",
+   "probs": {
+    "help": 1,
+    "inform": 0,
+    "cancel_order": 0,
+    "faq.freshness": 0,
+    "thanks_bye": 0
+   }
+  },
+  "แอดช่วยอะไรได้บ้าง": {
+   "intent": "help",
+   "confidence": 1,
+   "entities": {},
+   "ms": 332,
+   "cost": 0.000161238,
+   "contexts": [],
+   "expected": "help",
+   "probs": {
+    "help": 1,
+    "cancel_order": 0,
+    "faq.roast_levels": 0,
+    "thanks_bye": 0,
+    "product_info": 0
+   }
+  },
+  "ใช้ยังไงครับเนี่ย": {
+   "intent": "help",
+   "confidence": 0.84,
+   "entities": {},
+   "ms": 329,
+   "cost": 0.000161196,
+   "contexts": [],
+   "expected": "help",
+   "probs": {
+    "help": 0.86,
+    "product_info": 0.06999999999999999,
+    "none": 0.05,
+    "faq.storage": 0.02,
+    "thanks_bye": 0
+   }
+  },
+  "นี่บอทใช่ไหม ถามอะไรได้บ้าง": {
+   "intent": "help",
+   "confidence": 1,
+   "entities": {},
+   "ms": 323,
+   "cost": 0.000161616,
+   "contexts": [],
+   "expected": "help",
+   "probs": {
+    "help": 1,
+    "product_info": 0,
+    "greet": 0,
+    "order_product": 0,
+    "faq.roast_levels": 0
+   }
+  },
+  "เริ่มใหม่": {
+   "intent": "start_over",
+   "confidence": 1,
+   "entities": {},
+   "ms": 300,
+   "cost": 0.00016086,
+   "contexts": [],
+   "expected": "start_over",
+   "probs": {
+    "start_over": 1,
+    "greet": 0,
+    "ask_price": 0,
+    "browse_catalog": 0,
+    "faq.storage": 0
+   }
+  },
+  "ขอเริ่มใหม่ตั้งแต่ต้นได้ไหมคะ": {
+   "intent": "start_over",
+   "confidence": 1,
+   "entities": {},
+   "ms": 560,
+   "cost": 0.0001617,
+   "contexts": [],
+   "expected": "start_over",
+   "probs": {
+    "start_over": 1,
+    "faq.payment_methods": 0,
+    "faq.minimum_order": 0,
+    "inform": 0,
+    "ask_price": 0
+   }
+  },
+  "รีเซ็ตแชตหน่อยครับ": {
+   "intent": "start_over",
+   "confidence": 0.99,
+   "entities": {},
+   "ms": 336,
+   "cost": 0.000161238,
+   "contexts": [],
+   "expected": "start_over",
+   "probs": {
+    "start_over": 1,
+    "faq.shipping_fee": 0,
+    "faq.payment_methods": 0,
+    "change_order": 0,
+    "ask_recommendation": 0
+   }
+  },
+  "ล้างทั้งหมดแล้วเริ่มใหม่นะ": {
+   "intent": "start_over",
+   "confidence": 1,
+   "entities": {},
+   "ms": 331,
+   "cost": 0.000161574,
+   "contexts": [],
+   "expected": "start_over",
+   "probs": {
+    "start_over": 1,
+    "faq.freshness": 0,
+    "greet": 0,
+    "cancel_order": 0,
+    "faq.storage": 0
+   }
+  },
+  "มีกาแฟอะไรบ้างคะ": {
+   "intent": "browse_catalog",
+   "confidence": 1,
+   "entities": {},
+   "ms": 324,
+   "cost": 0.000161154,
+   "contexts": [],
+   "expected": "browse_catalog",
+   "probs": {
+    "browse_catalog": 1,
+    "faq.delivery_time": 0,
+    "faq.freshness": 0,
+    "inform": 0,
+    "help": 0
+   }
+  },
+  "ขอดูเมล็ดทั้งหมดหน่อยครับ": {
+   "intent": "browse_catalog",
+   "confidence": 1,
+   "entities": {},
+   "ms": 311,
+   "cost": 0.000161532,
+   "contexts": [],
+   "expected": "browse_catalog",
+   "probs": {
+    "browse_catalog": 1,
+    "change_order": 0,
+    "faq.freshness": 0,
+    "faq.grinding": 0,
+    "product_info": 0
+   }
+  },
+  "ร้านขายอะไรบ้าง": {
+   "intent": "browse_catalog",
+   "confidence": 0.99,
+   "entities": {},
+   "ms": 335,
+   "cost": 0.000161112,
+   "contexts": [],
+   "expected": "browse_catalog",
+   "probs": {
+    "browse_catalog": 0.99,
+    "none": 0.01,
+    "product_info": 0,
+    "greet": 0,
+    "view_order": 0
+   }
+  },
+  "มีเมล็ดคั่วเข้มตัวไหนบ้างคะ": {
+   "intent": "browse_catalog",
+   "confidence": 0.93,
+   "entities": {
+    "roast": "dark"
+   },
+   "ms": 342,
+   "cost": 0.000161616,
+   "contexts": [],
+   "expected": "browse_catalog",
+   "probs": {
+    "browse_catalog": 0.93,
+    "product_info": 0.03,
+    "ask_recommendation": 0.02,
+    "faq.roast_levels": 0.01,
+    "ask_promotion": 0
+   }
+  },
+  "ช่วยแนะนำหน่อยค่ะ": {
+   "intent": "ask_recommendation",
+   "confidence": 1,
+   "entities": {},
+   "ms": 343,
+   "cost": 0.000161196,
+   "contexts": [],
+   "expected": "ask_recommendation",
+   "probs": {
+    "ask_recommendation": 1,
+    "faq.freshness": 0,
+    "change_order": 0,
+    "browse_catalog": 0,
+    "greet": 0
+   }
+  },
+  "แนะนำเมล็ดสำหรับทำลาเต้หน่อยครับ": {
+   "intent": "ask_recommendation",
+   "confidence": 1,
+   "entities": {
+    "brew": "espresso_milk"
+   },
+   "ms": 321,
+   "cost": 0.000161826,
+   "contexts": [],
+   "expected": "ask_recommendation",
+   "probs": {
+    "ask_recommendation": 1,
+    "faq.freshness": 0,
+    "ask_promotion": 0,
+    "greet": 0,
+    "faq.grinding": 0
+   }
+  },
+  "ไม่รู้จะเลือกตัวไหนดี ชอบคั่วกลางค่ะ": {
+   "intent": "ask_recommendation",
+   "confidence": 1,
+   "entities": {
+    "roast": "medium"
+   },
+   "ms": 307,
+   "cost": 0.000161994,
+   "contexts": [],
+   "expected": "ask_recommendation",
+   "probs": {
+    "ask_recommendation": 1,
+    "product_info": 0,
+    "ask_promotion": 0,
+    "faq.payment_methods": 0,
+    "help": 0
+   }
+  },
+  "อยากได้เมล็ดคั่วอ่อนไว้ดริป ตัวไหนดีคะ": {
+   "intent": "ask_recommendation",
+   "confidence": 1,
+   "entities": {
+    "brew": "filter",
+    "roast": "light"
+   },
+   "ms": 351,
+   "cost": 0.000162078,
+   "contexts": [],
+   "expected": "ask_recommendation",
+   "probs": {
+    "ask_recommendation": 1,
+    "ask_price": 0,
+    "faq.roast_levels": 0,
+    "faq.shipping_fee": 0,
+    "help": 0
+   }
+  },
+  "เกอิชารสชาติเป็นยังไงคะ": {
+   "intent": "product_info",
+   "confidence": 0.97,
+   "entities": {
+    "product": "DH-001"
+   },
+   "ms": 331,
+   "cost": 0.000161448,
+   "contexts": [],
+   "expected": "product_info",
+   "probs": {
+    "product_info": 0.98,
+    "faq.roast_levels": 0.01,
+    "none": 0.01,
+    "thanks_bye": 0,
+    "ask_promotion": 0
+   }
+  },
+  "ฮันนี่โปรเซสยังมีของไหม": {
+   "intent": "product_info",
+   "confidence": 0.99,
+   "entities": {
+    "product": "DH-002"
+   },
+   "ms": 317,
+   "cost": 0.000161448,
+   "contexts": [],
+   "expected": "product_info",
+   "probs": {
+    "product_info": 1,
+    "ask_price": 0,
+    "faq.freshness": 0,
+    "faq.shipping_fee": 0,
+    "none": 0
+   }
+  },
+  "ตัวโคลด์บรูว์เบลนด์เป็นยังไงครับ": {
+   "intent": "product_info",
+   "confidence": 0.99,
+   "entities": {
+    "product": "MM-003",
+    "brew": "cold_brew"
+   },
+   "ms": 317,
+   "cost": 0.000161826,
+   "contexts": [],
+   "expected": "product_info",
+   "probs": {
+    "product_info": 1,
+    "ask_promotion": 0,
+    "faq.grinding": 0,
+    "order_product": 0,
+    "thanks_bye": 0
+   }
+  },
+  "ขอรายละเอียดพีเบอร์รี่หน่อยค่ะ": {
+   "intent": "product_info",
+   "confidence": 0.99,
+   "entities": {
+    "product": "MM-002"
+   },
+   "ms": 384,
+   "cost": 0.000161742,
+   "contexts": [],
+   "expected": "product_info",
+   "probs": {
+    "product_info": 1,
+    "thanks_bye": 0,
+    "faq.shipping_fee": 0,
+    "faq.storage": 0,
+    "inform": 0
+   }
+  },
+  "เกอิชาถุงละเท่าไหร่คะ": {
+   "intent": "ask_price",
+   "confidence": 0.96,
+   "entities": {
+    "product": "DH-001"
+   },
+   "ms": 362,
+   "cost": 0.000161364,
+   "contexts": [],
+   "expected": "ask_price",
+   "probs": {
+    "ask_price": 0.97,
+    "none": 0.03,
+    "faq.roast_levels": 0,
+    "start_over": 0,
+    "greet": 0
+   }
+  },
+  "เฮาส์เบลนด์ราคาเท่าไหร่": {
+   "intent": "ask_price",
+   "confidence": 1,
+   "entities": {
+    "product": "KBN-001"
+   },
+   "ms": 311,
+   "cost": 0.000161448,
+   "contexts": [],
+   "expected": "ask_price",
+   "probs": {
+    "ask_price": 1,
+    "faq.delivery_time": 0,
+    "ask_promotion": 0,
+    "inform": 0,
+    "faq.payment_methods": 0
+   }
+  },
+  "ดีแคฟกี่บาทครับ": {
+   "intent": "ask_price",
+   "confidence": 1,
+   "entities": {
+    "product": "KBN-003",
+    "roast": "decaf"
+   },
+   "ms": 342,
+   "cost": 0.000161112,
+   "contexts": [],
+   "expected": "ask_price",
+   "probs": {
+    "ask_price": 1,
+    "faq.grinding": 0,
+    "start_over": 0,
+    "order_product": 0,
+    "faq.delivery_time": 0
+   }
+  },
+  "ตัวนี้ราคาเท่าไหร่คะ": {
+   "intent": "ask_price",
+   "confidence": 1,
+   "entities": {},
+   "ms": 304,
+   "cost": 0.00016527,
+   "contexts": [],
+   "expected": "ask_price",
+   "probs": {
+    "ask_price": 1,
+    "inform": 0,
+    "browse_catalog": 0,
+    "faq.grinding": 0,
+    "faq.freshness": 0
+   }
+  },
+  "ช่วงนี้มีโปรอะไรไหมคะ": {
+   "intent": "ask_promotion",
+   "confidence": 1,
+   "entities": {},
+   "ms": 306,
+   "cost": 0.000161364,
+   "contexts": [],
+   "expected": "ask_promotion",
+   "probs": {
+    "ask_promotion": 1,
+    "faq.roast_levels": 0,
+    "inform": 0,
+    "thanks_bye": 0,
+    "change_order": 0
+   }
+  },
+  "ซื้อเยอะมีส่วนลดไหมครับ": {
+   "intent": "ask_promotion",
+   "confidence": 1,
+   "entities": {},
+   "ms": 368,
+   "cost": 0.000161448,
+   "contexts": [],
+   "expected": "ask_promotion",
+   "probs": {
+    "ask_promotion": 1,
+    "product_info": 0,
+    "help": 0,
+    "faq.payment_methods": 0,
+    "ask_recommendation": 0
+   }
+  },
+  "มีของแถมไหม": {
+   "intent": "ask_promotion",
+   "confidence": 1,
+   "entities": {},
+   "ms": 355,
+   "cost": 0.000160944,
+   "contexts": [],
+   "expected": "ask_promotion",
+   "probs": {
+    "ask_promotion": 1,
+    "inform": 0,
+    "faq.delivery_time": 0,
+    "faq.payment_methods": 0,
+    "faq.grinding": 0
+   }
+  },
+  "เฮาส์เบลนด์มีโปรไหมคะ": {
+   "intent": "ask_promotion",
+   "confidence": 1,
+   "entities": {
+    "product": "KBN-001"
+   },
+   "ms": 365,
+   "cost": 0.000161364,
+   "contexts": [],
+   "expected": "ask_promotion",
+   "probs": {
+    "ask_promotion": 1,
+    "inform": 0,
+    "faq.delivery_time": 0,
+    "faq.payment_methods": 0,
+    "faq.grinding": 0
+   }
+  },
+  "เอาเฮาส์เบลนด์ 2 ถุงค่ะ": {
+   "intent": "order_product",
+   "confidence": 1,
+   "entities": {
+    "product": "KBN-001",
+    "quantity": "2"
+   },
+   "ms": 342,
+   "cost": 0.000161448,
+   "contexts": [],
+   "expected": "order_product",
+   "probs": {
+    "order_product": 1,
+    "faq.shipping_fee": 0,
+    "faq.payment_methods": 0,
+    "change_order": 0,
+    "faq.minimum_order": 0
+   }
+  },
+  "สั่งเลยครับ": {
+   "intent": "order_product",
+   "confidence": 0.87,
+   "entities": {},
+   "ms": 303,
+   "cost": 0.000160944,
+   "contexts": [],
+   "expected": "order_product",
+   "probs": {
+    "order_product": 0.89,
+    "inform": 0.09,
+    "none": 0.02,
+    "faq.delivery_time": 0,
+    "ask_recommendation": 0
+   }
+  },
+  "อยากได้ดีแคฟ 1 ถุง สั่งยังไงคะ": {
+   "intent": "order_product",
+   "confidence": 1,
+   "entities": {
+    "product": "KBN-003",
+    "quantity": "1",
+    "roast": "decaf"
+   },
+   "ms": 351,
+   "cost": 0.000161742,
+   "contexts": [],
+   "expected": "order_product",
+   "probs": {
+    "order_product": 1,
+    "faq.payment_methods": 0,
+    "ask_recommendation": 0,
+    "change_order": 0,
+    "ask_price": 0
+   }
+  },
+  "ขอสั่งเกอิชาหน่อยค่ะ": {
+   "intent": "order_product",
+   "confidence": 0.96,
+   "entities": {
+    "product": "DH-001"
+   },
+   "ms": 339,
+   "cost": 0.000161322,
+   "contexts": [],
+   "expected": "order_product",
+   "probs": {
+    "order_product": 0.97,
+    "none": 0.03,
+    "product_info": 0,
+    "greet": 0,
+    "faq.roast_levels": 0
+   }
+  },
+  "เอาเอสเปรสโซ่คั่วเข้ม 3 ถุง เก็บปลายทางนะครับ": {
+   "intent": "order_product",
+   "confidence": 0.99,
+   "entities": {
+    "product": "KBN-002",
+    "quantity": "3",
+    "brew": "espresso_milk",
+    "roast": "dark",
+    "payment": "cod"
+   },
+   "ms": 349,
+   "cost": 0.000162372,
+   "contexts": [],
+   "expected": "order_product",
+   "probs": {
+    "order_product": 0.99,
+    "change_order": 0.01,
+    "faq.shipping_fee": 0,
+    "faq.payment_methods": 0,
+    "faq.storage": 0
+   }
+  },
+  "2 ถุงค่ะ": {
+   "intent": "inform",
+   "confidence": 0.88,
+   "entities": {
+    "quantity": "2"
+   },
+   "ms": 317,
+   "cost": 0.000161322,
+   "contexts": [
+    "ask_quantity"
+   ],
+   "expected": "inform",
+   "probs": {
+    "inform": 0.89,
+    "order_product": 0.11,
+    "product_info": 0,
+    "ask_promotion": 0,
+    "help": 0
+   }
+  },
+  "ดริปค่ะ": {
+   "intent": "inform",
+   "confidence": 1,
+   "entities": {
+    "brew": "filter"
+   },
+   "ms": 354,
+   "cost": 0.000160356,
+   "contexts": [
+    "ask_brew"
+   ],
+   "expected": "inform",
+   "probs": {
+    "inform": 1,
+    "faq.delivery_time": 0,
+    "thanks_bye": 0,
+    "ask_price": 0,
+    "start_over": 0
+   }
+  },
+  "คั่วเข้มครับ": {
+   "intent": "inform",
+   "confidence": 1,
+   "entities": {
+    "roast": "dark"
+   },
+   "ms": 353,
+   "cost": 0.000160692,
+   "contexts": [
+    "ask_roast"
+   ],
+   "expected": "inform",
+   "probs": {
+    "inform": 1,
+    "ask_promotion": 0,
+    "faq.grinding": 0,
+    "change_order": 0,
+    "browse_catalog": 0
+   }
+  },
+  "โอนเอาค่ะ": {
+   "intent": "inform",
+   "confidence": 1,
+   "entities": {
+    "payment": "transfer"
+   },
+   "ms": 318,
+   "cost": 0.000163128,
+   "contexts": [
+    "ask_payment"
+   ],
+   "expected": "inform",
+   "probs": {
+    "inform": 1,
+    "ask_recommendation": 0,
+    "greet": 0,
+    "faq.freshness": 0,
+    "faq.storage": 0
+   }
+  },
+  "เก็บปลายทางครับ": {
+   "intent": "inform",
+   "confidence": 1,
+   "entities": {
+    "payment": "cod"
+   },
+   "ms": 314,
+   "cost": 0.00016338,
+   "contexts": [
+    "ask_payment"
+   ],
+   "expected": "inform",
+   "probs": {
+    "inform": 1,
+    "product_info": 0,
+    "help": 0,
+    "view_order": 0,
+    "ask_price": 0
+   }
+  },
+  "ทำลาเต้ที่บ้านค่ะ ชอบคั่วกลาง": {
+   "intent": "inform",
+   "confidence": 0.98,
+   "entities": {
+    "brew": "espresso_milk",
+    "roast": "medium"
+   },
+   "ms": 325,
+   "cost": 0.00016128,
+   "contexts": [
+    "ask_brew"
+   ],
+   "expected": "inform",
+   "probs": {
+    "inform": 0.99,
+    "ask_recommendation": 0.01,
+    "faq.freshness": 0,
+    "change_order": 0,
+    "browse_catalog": 0
+   }
+  },
+  "ค่าส่งเท่าไหร่คะ": {
+   "intent": "faq.shipping_fee",
+   "confidence": 1,
+   "entities": {},
+   "ms": 421,
+   "cost": 0.000161658,
+   "contexts": [
+    "ask_quantity"
+   ],
+   "expected": "faq.shipping_fee",
+   "probs": {
+    "faq.shipping_fee": 1,
+    "ask_promotion": 0,
+    "faq.freshness": 0,
+    "start_over": 0,
+    "thanks_bye": 0
+   }
+  },
+  "ส่งต่างจังหวัดคิดค่าส่งยังไงคะ": {
+   "intent": "faq.shipping_fee",
+   "confidence": 1,
+   "entities": {},
+   "ms": 322,
+   "cost": 0.000161742,
+   "contexts": [],
+   "expected": "faq.shipping_fee",
+   "probs": {
+    "faq.shipping_fee": 1,
+    "faq.freshness": 0,
+    "inform": 0,
+    "thanks_bye": 0,
+    "change_order": 0
+   }
+  },
+  "ส่งฟรีไหมครับ": {
+   "intent": "faq.shipping_fee",
+   "confidence": 1,
+   "entities": {},
+   "ms": 380,
+   "cost": 0.000161028,
+   "contexts": [],
+   "expected": "faq.shipping_fee",
+   "probs": {
+    "faq.shipping_fee": 1,
+    "ask_recommendation": 0,
+    "faq.freshness": 0,
+    "faq.roast_levels": 0,
+    "ask_promotion": 0
+   }
+  },
+  "ต้องสั่งเท่าไหร่ถึงจะส่งฟรี": {
+   "intent": "faq.shipping_fee",
+   "confidence": 0.98,
+   "entities": {},
+   "ms": 362,
+   "cost": 0.000161616,
+   "contexts": [],
+   "expected": "faq.shipping_fee",
+   "probs": {
+    "faq.shipping_fee": 0.98,
+    "faq.minimum_order": 0.02,
+    "thanks_bye": 0,
+    "faq.storage": 0,
+    "faq.grinding": 0
+   }
+  },
+  "จ่ายเงินยังไงได้บ้าง": {
+   "intent": "faq.payment_methods",
+   "confidence": 1,
+   "entities": {},
+   "ms": 371,
+   "cost": 0.000161322,
+   "contexts": [],
+   "expected": "faq.payment_methods",
+   "probs": {
+    "faq.payment_methods": 1,
+    "change_order": 0,
+    "cancel_order": 0,
+    "product_info": 0,
+    "faq.grinding": 0
+   }
+  },
+  "เก็บเงินปลายทางได้ไหมคะ": {
+   "intent": "faq.payment_methods",
+   "confidence": 1,
+   "entities": {
+    "payment": "cod"
+   },
+   "ms": 329,
+   "cost": 0.000161448,
+   "contexts": [],
+   "expected": "faq.payment_methods",
+   "probs": {
+    "faq.payment_methods": 1,
+    "thanks_bye": 0,
+    "faq.shipping_fee": 0,
+    "faq.storage": 0,
+    "inform": 0
+   }
+  },
+  "โอนเงินได้ไหม หรือมีเก็บปลายทาง": {
+   "intent": "faq.payment_methods",
+   "confidence": 1,
+   "entities": {},
+   "ms": 294,
+   "cost": 0.000161784,
+   "contexts": [],
+   "expected": "faq.payment_methods",
+   "probs": {
+    "faq.payment_methods": 1,
+    "change_order": 0,
+    "view_order": 0,
+    "ask_promotion": 0,
+    "order_product": 0
+   }
+  },
+  "รับบัตรเครดิตไหมครับ": {
+   "intent": "faq.payment_methods",
+   "confidence": 1,
+   "entities": {},
+   "ms": 321,
+   "cost": 0.000161322,
+   "contexts": [],
+   "expected": "faq.payment_methods",
+   "probs": {
+    "faq.payment_methods": 1,
+    "faq.roast_levels": 0,
+    "faq.shipping_fee": 0,
+    "faq.storage": 0,
+    "inform": 0
+   }
+  },
+  "คั่วอ่อนกับคั่วเข้มรสชาติต่างกันยังไง": {
+   "intent": "faq.roast_levels",
+   "confidence": 1,
+   "entities": {
+    "roast": "light"
+   },
+   "ms": 548,
+   "cost": 0.000162036,
+   "contexts": [],
+   "expected": "faq.roast_levels",
+   "probs": {
+    "faq.roast_levels": 1,
+    "change_order": 0,
+    "view_order": 0,
+    "ask_promotion": 0,
+    "order_product": 0
+   }
+  },
+  "คั่วกลางคือแบบไหนคะ": {
+   "intent": "faq.roast_levels",
+   "confidence": 1,
+   "entities": {
+    "roast": "medium"
+   },
+   "ms": 361,
+   "cost": 0.00016128,
+   "contexts": [],
+   "expected": "faq.roast_levels",
+   "probs": {
+    "faq.roast_levels": 1,
+    "faq.shipping_fee": 0,
+    "ask_price": 0,
+    "ask_recommendation": 0,
+    "order_product": 0
+   }
+  },
+  "ระดับคั่วมันต่างกันยังไงครับ ไม่ค่อยเข้าใจ": {
+   "intent": "faq.roast_levels",
+   "confidence": 1,
+   "entities": {},
+   "ms": 346,
+   "cost": 0.000162246,
+   "contexts": [],
+   "expected": "faq.roast_levels",
+   "probs": {
+    "faq.roast_levels": 1,
+    "thanks_bye": 0,
+    "product_info": 0,
+    "none": 0,
+    "cancel_order": 0
+   }
+  },
+  "คั่วอ่อนจะเปรี้ยวไหมคะ": {
+   "intent": "faq.roast_levels",
+   "confidence": 0.93,
+   "entities": {
+    "roast": "light"
+   },
+   "ms": 332,
+   "cost": 0.000161406,
+   "contexts": [],
+   "expected": "faq.roast_levels",
+   "probs": {
+    "faq.roast_levels": 0.94,
+    "product_info": 0.06,
+    "greet": 0,
+    "faq.payment_methods": 0,
+    "faq.grinding": 0
+   }
+  },
+  "เก็บเมล็ดกาแฟยังไงให้อยู่นาน": {
+   "intent": "faq.storage",
+   "confidence": 1,
+   "entities": {},
+   "ms": 305,
+   "cost": 0.000161658,
+   "contexts": [],
+   "expected": "faq.storage",
+   "probs": {
+    "faq.storage": 1,
+    "start_over": 0,
+    "faq.freshness": 0,
+    "faq.grinding": 0,
+    "cancel_order": 0
+   }
+  },
+  "ซื้อไปแล้วควรเก็บยังไงดี ใส่ตู้เย็นได้ไหม": {
+   "intent": "faq.storage",
+   "confidence": 1,
+   "entities": {},
+   "ms": 315,
+   "cost": 0.000162204,
+   "contexts": [],
+   "expected": "faq.storage",
+   "probs": {
+    "faq.storage": 1,
+    "start_over": 0,
+    "faq.freshness": 0,
+    "faq.shipping_fee": 0,
+    "cancel_order": 0
+   }
+  },
+  "เปิดถุงแล้วเก็บได้นานแค่ไหนคะ": {
+   "intent": "faq.storage",
+   "confidence": 0.99,
+   "entities": {},
+   "ms": 303,
+   "cost": 0.0001617,
+   "contexts": [],
+   "expected": "faq.storage",
+   "probs": {
+    "faq.storage": 1,
+    "faq.shipping_fee": 0,
+    "ask_price": 0,
+    "ask_recommendation": 0,
+    "order_product": 0
+   }
+  },
+  "ต้องเก็บในภาชนะแบบไหนครับ": {
+   "intent": "faq.storage",
+   "confidence": 1,
+   "entities": {},
+   "ms": 307,
+   "cost": 0.000161532,
+   "contexts": [],
+   "expected": "faq.storage",
+   "probs": {
+    "faq.storage": 1,
+    "faq.payment_methods": 0,
+    "faq.minimum_order": 0,
+    "faq.grinding": 0,
+    "ask_price": 0
+   }
+  },
+  "สั่งแล้วได้ของกี่วัน": {
+   "intent": "faq.delivery_time",
+   "confidence": 1,
+   "entities": {},
+   "ms": 318,
+   "cost": 0.000161322,
+   "contexts": [],
+   "expected": "faq.delivery_time",
+   "probs": {
+    "faq.delivery_time": 1,
+    "product_info": 0,
+    "greet": 0,
+    "view_order": 0,
+    "faq.roast_levels": 0
+   }
+  },
+  "สั่งวันนี้จะได้ของเมื่อไหร่": {
+   "intent": "faq.delivery_time",
+   "confidence": 1,
+   "entities": {},
+   "ms": 313,
+   "cost": 0.000161616,
+   "contexts": [],
+   "expected": "faq.delivery_time",
+   "probs": {
+    "faq.delivery_time": 1,
+    "ask_promotion": 0,
+    "faq.grinding": 0,
+    "order_product": 0,
+    "product_info": 0
+   }
+  },
+  "ส่งกี่วันถึงครับ": {
+   "intent": "faq.delivery_time",
+   "confidence": 1,
+   "entities": {},
+   "ms": 328,
+   "cost": 0.000161154,
+   "contexts": [],
+   "expected": "faq.delivery_time",
+   "probs": {
+    "faq.delivery_time": 1,
+    "faq.minimum_order": 0,
+    "inform": 0,
+    "browse_catalog": 0,
+    "faq.freshness": 0
+   }
+  },
+  "ส่งไปเชียงใหม่ใช้เวลากี่วันคะ": {
+   "intent": "faq.delivery_time",
+   "confidence": 1,
+   "entities": {},
+   "ms": 329,
+   "cost": 0.0001617,
+   "contexts": [],
+   "expected": "faq.delivery_time",
+   "probs": {
+    "faq.delivery_time": 1,
+    "thanks_bye": 0,
+    "faq.shipping_fee": 0,
+    "faq.storage": 0,
+    "ask_price": 0
+   }
+  },
+  "มีบดให้ไหม": {
+   "intent": "faq.grinding",
+   "confidence": 1,
+   "entities": {},
+   "ms": 347,
+   "cost": 0.000160902,
+   "contexts": [],
+   "expected": "faq.grinding",
+   "probs": {
+    "faq.grinding": 1,
+    "faq.shipping_fee": 0,
+    "faq.payment_methods": 0,
+    "change_order": 0,
+    "ask_recommendation": 0
+   }
+  },
+  "ที่บ้านไม่มีเครื่องบด บดให้ได้ไหมคะ": {
+   "intent": "faq.grinding",
+   "confidence": 1,
+   "entities": {},
+   "ms": 369,
+   "cost": 0.000161952,
+   "contexts": [],
+   "expected": "faq.grinding",
+   "probs": {
+    "faq.grinding": 1,
+    "faq.delivery_time": 0,
+    "thanks_bye": 0,
+    "start_over": 0,
+    "product_info": 0
+   }
+  },
+  "ขอแบบบดแล้วได้ไหมครับ": {
+   "intent": "faq.grinding",
+   "confidence": 0.93,
+   "entities": {
+    "brew": "filter"
+   },
+   "ms": 323,
+   "cost": 0.000161364,
+   "contexts": [],
+   "expected": "faq.grinding",
+   "probs": {
+    "faq.grinding": 0.94,
+    "change_order": 0.05,
+    "inform": 0.01,
+    "faq.roast_levels": 0,
+    "faq.shipping_fee": 0
+   }
+  },
+  "บดสำหรับโมก้าพอตได้ไหมคะ": {
+   "intent": "faq.grinding",
+   "confidence": 0.99,
+   "entities": {
+    "brew": "filter"
+   },
+   "ms": 299,
+   "cost": 0.00016149,
+   "contexts": [],
+   "expected": "faq.grinding",
+   "probs": {
+    "faq.grinding": 1,
+    "inform": 0,
+    "faq.shipping_fee": 0,
+    "browse_catalog": 0,
+    "faq.minimum_order": 0
+   }
+  },
+  "ซื้อขั้นต่ำเท่าไหร่": {
+   "intent": "faq.minimum_order",
+   "confidence": 1,
+   "entities": {},
+   "ms": 337,
+   "cost": 0.00016128,
+   "contexts": [],
+   "expected": "faq.minimum_order",
+   "probs": {
+    "faq.minimum_order": 1,
+    "inform": 0,
+    "none": 0,
+    "product_info": 0,
+    "thanks_bye": 0
+   }
+  },
+  "ต้องสั่งขั้นต่ำกี่ถุง": {
+   "intent": "faq.minimum_order",
+   "confidence": 1,
+   "entities": {},
+   "ms": 317,
+   "cost": 0.000161364,
+   "contexts": [],
+   "expected": "faq.minimum_order",
+   "probs": {
+    "faq.minimum_order": 1,
+    "product_info": 0,
+    "ask_promotion": 0,
+    "ask_recommendation": 0,
+    "faq.payment_methods": 0
+   }
+  },
+  "สั่งถุงเดียวได้ไหมคะ": {
+   "intent": "faq.minimum_order",
+   "confidence": 0.98,
+   "entities": {
+    "quantity": "1"
+   },
+   "ms": 349,
+   "cost": 0.000161322,
+   "contexts": [],
+   "expected": "faq.minimum_order",
+   "probs": {
+    "faq.minimum_order": 0.99,
+    "order_product": 0.01,
+    "none": 0,
+    "greet": 0,
+    "inform": 0
+   }
+  },
+  "มีขั้นต่ำในการสั่งไหมครับ": {
+   "intent": "faq.minimum_order",
+   "confidence": 1,
+   "entities": {},
+   "ms": 308,
+   "cost": 0.000161532,
+   "contexts": [],
+   "expected": "faq.minimum_order",
+   "probs": {
+    "faq.minimum_order": 1,
+    "start_over": 0,
+    "faq.freshness": 0,
+    "browse_catalog": 0,
+    "faq.storage": 0
+   }
+  },
+  "เมล็ดคั่วใหม่ไหม": {
+   "intent": "faq.freshness",
+   "confidence": 1,
+   "entities": {},
+   "ms": 327,
+   "cost": 0.000161154,
+   "contexts": [],
+   "expected": "faq.freshness",
+   "probs": {
+    "faq.freshness": 1,
+    "faq.delivery_time": 0,
+    "ask_recommendation": 0,
+    "order_product": 0,
+    "none": 0
+   }
+  },
+  "เมล็ดคั่วมานานหรือยัง สดไหม": {
+   "intent": "faq.freshness",
+   "confidence": 1,
+   "entities": {},
+   "ms": 339,
+   "cost": 0.000161616,
+   "contexts": [],
+   "expected": "faq.freshness",
+   "probs": {
+    "faq.freshness": 1,
+    "faq.grinding": 0,
+    "order_product": 0,
+    "view_order": 0,
+    "none": 0
+   }
+  },
+  "บนถุงมีวันคั่วบอกไหมคะ": {
+   "intent": "faq.freshness",
+   "confidence": 0.99,
+   "entities": {},
+   "ms": 322,
+   "cost": 0.000161406,
+   "contexts": [],
+   "expected": "faq.freshness",
+   "probs": {
+    "faq.freshness": 0.99,
+    "product_info": 0.01,
+    "faq.shipping_fee": 0,
+    "faq.grinding": 0,
+    "browse_catalog": 0
+   }
+  },
+  "คั่วสดทุกล็อตไหมครับ": {
+   "intent": "faq.freshness",
+   "confidence": 1,
+   "entities": {},
+   "ms": 348,
+   "cost": 0.000161322,
+   "contexts": [],
+   "expected": "faq.freshness",
+   "probs": {
+    "faq.freshness": 1,
+    "faq.grinding": 0,
+    "inform": 0,
+    "order_product": 0,
+    "product_info": 0
+   }
+  },
+  "ตอนนี้สั่งอะไรไปบ้างคะ": {
+   "intent": "view_order",
+   "confidence": 0.98,
+   "entities": {},
+   "ms": 331,
+   "cost": 0.000161406,
+   "contexts": [],
+   "expected": "view_order",
+   "probs": {
+    "view_order": 0.99,
+    "none": 0.01,
+    "faq.delivery_time": 0,
+    "product_info": 0,
+    "start_over": 0
+   }
+  },
+  "ขอดูออเดอร์หน่อยครับ": {
+   "intent": "view_order",
+   "confidence": 1,
+   "entities": {},
+   "ms": 357,
+   "cost": 0.000161322,
+   "contexts": [],
+   "expected": "view_order",
+   "probs": {
+    "view_order": 1,
+    "ask_recommendation": 0,
+    "faq.roast_levels": 0,
+    "faq.freshness": 0,
+    "ask_promotion": 0
+   }
+  },
+  "ยอดรวมทั้งหมดเท่าไหร่แล้ว": {
+   "intent": "view_order",
+   "confidence": 1,
+   "entities": {},
+   "ms": 312,
+   "cost": 0.000161532,
+   "contexts": [],
+   "expected": "view_order",
+   "probs": {
+    "view_order": 1,
+    "faq.freshness": 0,
+    "faq.delivery_time": 0,
+    "inform": 0,
+    "help": 0
+   }
+  },
+  "สรุปรายการให้หน่อยค่ะ": {
+   "intent": "view_order",
+   "confidence": 0.99,
+   "entities": {},
+   "ms": 340,
+   "cost": 0.000161364,
+   "contexts": [],
+   "expected": "view_order",
+   "probs": {
+    "view_order": 1,
+    "change_order": 0,
+    "faq.freshness": 0,
+    "browse_catalog": 0,
+    "faq.grinding": 0
+   }
+  },
+  "ขอเปลี่ยนเป็น 3 ถุงได้ไหมคะ": {
+   "intent": "change_order",
+   "confidence": 1,
+   "entities": {
+    "quantity": "3"
+   },
+   "ms": 321,
+   "cost": 0.000161616,
+   "contexts": [],
+   "expected": "change_order",
+   "probs": {
+    "change_order": 1,
+    "faq.grinding": 0,
+    "browse_catalog": 0,
+    "faq.payment_methods": 0,
+    "faq.freshness": 0
+   }
+  },
+  "เปลี่ยนเป็นเกอิชาแทนได้ไหมครับ": {
+   "intent": "change_order",
+   "confidence": 0.92,
+   "entities": {
+    "product": "DH-001"
+   },
+   "ms": 438,
+   "cost": 0.000161742,
+   "contexts": [],
+   "expected": "change_order",
+   "probs": {
+    "change_order": 0.93,
+    "none": 0.06999999999999999,
+    "faq.freshness": 0,
+    "start_over": 0,
+    "ask_recommendation": 0
+   }
+  },
+  "ขอเปลี่ยนเป็นโอนเงินแทนค่ะ": {
+   "intent": "change_order",
+   "confidence": 0.99,
+   "entities": {
+    "payment": "transfer"
+   },
+   "ms": 318,
+   "cost": 0.000161574,
+   "contexts": [],
+   "expected": "change_order",
+   "probs": {
+    "change_order": 0.99,
+    "inform": 0.01,
+    "ask_price": 0,
+    "greet": 0,
+    "faq.shipping_fee": 0
+   }
+  },
+  "ขอแก้ออเดอร์หน่อยครับ": {
+   "intent": "change_order",
+   "confidence": 1,
+   "entities": {},
+   "ms": 305,
+   "cost": 0.000161364,
+   "contexts": [],
+   "expected": "change_order",
+   "probs": {
+    "change_order": 1,
+    "faq.roast_levels": 0,
+    "start_over": 0,
+    "view_order": 0,
+    "none": 0
+   }
+  },
+  "ไม่ใช่ครับ ผมสั่งเอสเปรสโซ่ ไม่ใช่เฮาส์เบลนด์": {
+   "intent": "change_order",
+   "confidence": 0.8,
+   "entities": {
+    "product": "KBN-002",
+    "brew": "espresso_milk"
+   },
+   "ms": 356,
+   "cost": 0.000173712,
+   "contexts": [
+    "confirm_order"
+   ],
+   "expected": "change_order",
+   "probs": {
+    "change_order": 0.8200000000000001,
+    "deny": 0.14,
+    "inform": 0.03,
+    "greet": 0,
+    "start_over": 0
+   }
+  },
+  "ยกเลิกออเดอร์ค่ะ": {
+   "intent": "cancel_order",
+   "confidence": 1,
+   "entities": {},
+   "ms": 327,
+   "cost": 0.000161154,
+   "contexts": [],
+   "expected": "cancel_order",
+   "probs": {
+    "cancel_order": 1,
+    "help": 0,
+    "faq.freshness": 0,
+    "browse_catalog": 0,
+    "faq.storage": 0
+   }
+  },
+  "ไม่เอาแล้วครับ ขอยกเลิก": {
+   "intent": "cancel_order",
+   "confidence": 1,
+   "entities": {},
+   "ms": 334,
+   "cost": 0.000161448,
+   "contexts": [],
+   "expected": "cancel_order",
+   "probs": {
+    "cancel_order": 1,
+    "change_order": 0,
+    "faq.roast_levels": 0,
+    "view_order": 0,
+    "inform": 0
+   }
+  },
+  "ขอยกเลิกที่สั่งไปทั้งหมด": {
+   "intent": "cancel_order",
+   "confidence": 1,
+   "entities": {},
+   "ms": 307,
+   "cost": 0.00016149,
+   "contexts": [],
+   "expected": "cancel_order",
+   "probs": {
+    "cancel_order": 1,
+    "ask_price": 0,
+    "start_over": 0,
+    "faq.delivery_time": 0,
+    "ask_recommendation": 0
+   }
+  },
+  "เปลี่ยนใจแล้ว ไม่สั่งแล้วค่ะ": {
+   "intent": "cancel_order",
+   "confidence": 0.99,
+   "entities": {},
+   "ms": 339,
+   "cost": 0.000161658,
+   "contexts": [],
+   "expected": "cancel_order",
+   "probs": {
+    "cancel_order": 1,
+    "ask_price": 0,
+    "start_over": 0,
+    "ask_recommendation": 0,
+    "faq.delivery_time": 0
+   }
+  },
+  "ยืนยันค่ะ": {
+   "intent": "affirm",
+   "confidence": 1,
+   "entities": {},
+   "ms": 304,
+   "cost": 0.0001722,
+   "contexts": [
+    "confirm_order"
+   ],
+   "expected": "affirm",
+   "probs": {
+    "affirm": 1,
+    "change_order": 0,
+    "greet": 0,
+    "help": 0,
+    "inform": 0
+   }
+  },
+  "โอเคครับ เอาตามนี้เลย": {
+   "intent": "affirm",
+   "confidence": 1,
+   "entities": {},
+   "ms": 349,
+   "cost": 0.000172704,
+   "contexts": [
+    "confirm_order"
+   ],
+   "expected": "affirm",
+   "probs": {
+    "affirm": 1,
+    "faq.delivery_time": 0,
+    "ask_recommendation": 0,
+    "order_product": 0,
+    "none": 0
+   }
+  },
+  "เอาค่ะ": {
+   "intent": "affirm",
+   "confidence": 0.49,
+   "entities": {
+    "product": "KBN-001"
+   },
+   "ms": 353,
+   "cost": 0.000170268,
+   "contexts": [
+    "offer_product"
+   ],
+   "expected": "affirm",
+   "probs": {
+    "affirm": 0.52,
+    "order_product": 0.48,
+    "ask_promotion": 0,
+    "faq.grinding": 0,
+    "product_info": 0
+   }
+  },
+  "สนใจค่ะ เพิ่มเป็น 5 ถุงเลย": {
+   "intent": "order_product",
+   "confidence": 0.39,
+   "entities": {
+    "quantity": "5"
+   },
+   "ms": 320,
+   "cost": 0.000171528,
+   "contexts": [
+    "offer_promo"
+   ],
+   "expected": "affirm",
+   "probs": {
+    "order_product": 0.41,
+    "change_order": 0.39,
+    "affirm": 0.18,
+    "inform": 0.02,
+    "ask_recommendation": 0
+   }
+  },
+  "ได้เลยค่ะ": {
+   "intent": "affirm",
+   "confidence": 0.96,
+   "entities": {},
+   "ms": 329,
+   "cost": 0.000170352,
+   "contexts": [
+    "offer_promo"
+   ],
+   "expected": "affirm",
+   "probs": {
+    "affirm": 0.97,
+    "deny": 0.02,
+    "order_product": 0.01,
+    "ask_price": 0,
+    "start_over": 0
+   }
+  },
+  "ไม่เป็นไรค่ะ เอาเท่าเดิม": {
+   "intent": "deny",
+   "confidence": 0.89,
+   "entities": {},
+   "ms": 369,
+   "cost": 0.000171444,
+   "contexts": [
+    "offer_promo"
+   ],
+   "expected": "deny",
+   "probs": {
+    "deny": 0.9,
+    "inform": 0.07,
+    "order_product": 0.02,
+    "change_order": 0.01,
+    "faq.minimum_order": 0
+   }
+  },
+  "ยังไม่เอาค่ะ": {
+   "intent": "deny",
+   "confidence": 1,
+   "entities": {},
+   "ms": 338,
+   "cost": 0.000170226,
+   "contexts": [
+    "offer_product"
+   ],
+   "expected": "deny",
+   "probs": {
+    "deny": 1,
+    "inform": 0,
+    "ask_promotion": 0,
+    "faq.delivery_time": 0,
+    "faq.payment_methods": 0
+   }
+  },
+  "เดี๋ยวก่อนนะ ขอคิดดูก่อน": {
+   "intent": "deny",
+   "confidence": 1,
+   "entities": {},
+   "ms": 337,
+   "cost": 0.00017283,
+   "contexts": [
+    "confirm_order"
+   ],
+   "expected": "deny",
+   "probs": {
+    "deny": 1,
+    "change_order": 0,
+    "faq.minimum_order": 0,
+    "view_order": 0,
+    "cancel_order": 0
+   }
+  },
+  "ไม่ครับ": {
+   "intent": "deny",
+   "confidence": 1,
+   "entities": {},
+   "ms": 386,
+   "cost": 0.000170352,
+   "contexts": [
+    "offer_promo"
+   ],
+   "expected": "deny",
+   "probs": {
+    "deny": 1,
+    "greet": 0,
+    "affirm": 0,
+    "browse_catalog": 0,
+    "faq.storage": 0
+   }
+  },
+  "ตัวแรกค่ะ": {
+   "intent": "select_option",
+   "confidence": 1,
+   "entities": {
+    "product": "DH-001"
+   },
+   "ms": 319,
+   "cost": 0.000169638,
+   "contexts": [
+    "options_shown"
+   ],
+   "expected": "select_option",
+   "probs": {
+    "select_option": 1,
+    "product_info": 0,
+    "inform": 0,
+    "help": 0,
+    "view_order": 0
+   }
+  },
+  "เอาตัวที่สองครับ": {
+   "intent": "select_option",
+   "confidence": 0.98,
+   "entities": {
+    "product": "DH-002"
+   },
+   "ms": 357,
+   "cost": 0.00017031,
+   "contexts": [
+    "options_shown"
+   ],
+   "expected": "select_option",
+   "probs": {
+    "select_option": 0.99,
+    "order_product": 0.01,
+    "product_info": 0,
+    "faq.roast_levels": 0,
+    "faq.payment_methods": 0
+   }
+  },
+  "สนใจวอชด์ อาราบิก้าค่ะ": {
+   "intent": "select_option",
+   "confidence": 0.99,
+   "entities": {
+    "product": "MM-001"
+   },
+   "ms": 373,
+   "cost": 0.000170184,
+   "contexts": [
+    "options_shown"
+   ],
+   "expected": "select_option",
+   "probs": {
+    "select_option": 1,
+    "change_order": 0,
+    "ask_price": 0,
+    "faq.storage": 0,
+    "faq.shipping_fee": 0
+   }
+  },
+  "อันหลังดีกว่า": {
+   "intent": "select_option",
+   "confidence": 1,
+   "entities": {
+    "product": "MM-004"
+   },
+   "ms": 337,
+   "cost": 0.000169974,
+   "contexts": [
+    "options_shown"
+   ],
+   "expected": "select_option",
+   "probs": {
+    "select_option": 1,
+    "faq.shipping_fee": 0,
+    "faq.payment_methods": 0,
+    "change_order": 0,
+    "faq.minimum_order": 0
+   }
+  },
+  "สมชาย ใจดี 123/4 ซอยสุขุมวิท 50 คลองเตย กรุงเทพ 10110 โทร 081-000-0000": {
+   "intent": "give_delivery_details",
+   "confidence": 1,
+   "entities": {},
+   "ms": 313,
+   "cost": 0.000168042,
+   "contexts": [
+    "ask_delivery"
+   ],
+   "expected": "give_delivery_details",
+   "probs": {
+    "give_delivery_details": 1,
+    "change_order": 0,
+    "none": 0,
+    "faq.shipping_fee": 0,
+    "ask_recommendation": 0
+   }
+  },
+  "ส่งที่ 99 หมู่ 1 ต.ช้างเผือก อ.เมือง เชียงใหม่ 50300 ค่ะ ชื่อมานี": {
+   "intent": "give_delivery_details",
+   "confidence": 0.99,
+   "entities": {},
+   "ms": 431,
+   "cost": 0.000168168,
+   "contexts": [
+    "ask_delivery"
+   ],
+   "expected": "give_delivery_details",
+   "probs": {
+    "give_delivery_details": 1,
+    "greet": 0,
+    "faq.payment_methods": 0,
+    "faq.grinding": 0,
+    "help": 0
+   }
+  },
+  "คุณปิติ 55 ถ.นิมมานเหมินท์ เชียงใหม่ 080-000-0000": {
+   "intent": "give_delivery_details",
+   "confidence": 1,
+   "entities": {},
+   "ms": 368,
+   "cost": 0.000167538,
+   "contexts": [
+    "ask_delivery"
+   ],
+   "expected": "give_delivery_details",
+   "probs": {
+    "give_delivery_details": 1,
+    "greet": 0,
+    "ask_price": 0,
+    "faq.storage": 0,
+    "browse_catalog": 0
+   }
+  },
+  "วันนี้ฝนตกไหมคะ": {
+   "intent": "none",
+   "confidence": 0.99,
+   "entities": {},
+   "ms": 334,
+   "cost": 0.000161112,
+   "contexts": [],
+   "expected": "none",
+   "probs": {
+    "none": 1,
+    "faq.grinding": 0,
+    "product_info": 0,
+    "order_product": 0,
+    "inform": 0
+   }
+  },
+  "มีหน้าร้านไหมคะ": {
+   "intent": "none",
+   "confidence": 0.64,
+   "entities": {},
+   "ms": 387,
+   "cost": 0.000161112,
+   "contexts": [],
+   "expected": "none",
+   "probs": {
+    "none": 0.67,
+    "browse_catalog": 0.31,
+    "help": 0.02,
+    "ask_price": 0,
+    "start_over": 0
+   }
+  },
+  "รับสมัครพนักงานไหมครับ": {
+   "intent": "none",
+   "confidence": 1,
+   "entities": {},
+   "ms": 329,
+   "cost": 0.000161406,
+   "contexts": [],
+   "expected": "none",
+   "probs": {
+    "none": 1,
+    "faq.freshness": 0,
+    "faq.shipping_fee": 0,
+    "browse_catalog": 0,
+    "faq.payment_methods": 0
+   }
+  },
+  "ขอเบอร์โทรร้านหน่อย": {
+   "intent": "none",
+   "confidence": 0.99,
+   "entities": {},
+   "ms": 331,
+   "cost": 0.00016128,
+   "contexts": [],
+   "expected": "none",
+   "probs": {
+    "none": 1,
+    "faq.payment_methods": 0,
+    "ask_recommendation": 0,
+    "faq.roast_levels": 0,
+    "faq.freshness": 0
+   }
+  },
+  "asdfgh": {
+   "intent": "none",
+   "confidence": 0.99,
+   "entities": {},
+   "ms": 382,
+   "cost": 0.000160566,
+   "contexts": [],
+   "expected": "none",
+   "probs": {
+    "none": 1,
+    "ask_promotion": 0,
+    "faq.freshness": 0,
+    "start_over": 0,
+    "browse_catalog": 0
+   }
+  },
+  "เอาเกอิชา 1 ถุงค่ะ โอนเงินนะคะ": {
+   "intent": "order_product",
+   "confidence": 0.98,
+   "entities": {
+    "product": "DH-001",
+    "quantity": "1",
+    "payment": "transfer"
+   },
+   "ms": 320,
+   "cost": 0.000161742,
+   "contexts": [],
+   "expected": "order_product",
+   "probs": {
+    "order_product": 0.99,
+    "inform": 0.01,
+    "none": 0,
+    "product_info": 0,
+    "thanks_bye": 0
+   }
+  },
+  "ขอพีเบอร์รี่ 2 ถุง": {
+   "intent": "order_product",
+   "confidence": 0.99,
+   "entities": {
+    "product": "MM-002",
+    "quantity": "2"
+   },
+   "ms": 328,
+   "cost": 0.000161238,
+   "contexts": [],
+   "expected": "order_product",
+   "probs": {
+    "order_product": 1,
+    "greet": 0,
+    "faq.payment_methods": 0,
+    "faq.grinding": 0,
+    "help": 0
+   }
+  },
+  "อยากได้เมล็ดสำหรับทำโคลด์บรูว์ 2 ถุงครับ": {
+   "intent": "order_product",
+   "confidence": 0.99,
+   "entities": {
+    "product": "MM-003",
+    "quantity": "2",
+    "brew": "cold_brew"
+   },
+   "ms": 341,
+   "cost": 0.000162162,
+   "contexts": [],
+   "expected": "order_product",
+   "probs": {
+    "order_product": 0.99,
+    "inform": 0.01,
+    "faq.grinding": 0,
+    "faq.minimum_order": 0,
+    "greet": 0
+   }
+  },
+  "มีแบบไม่มีคาเฟอีนไหมคะ": {
+   "intent": "product_info",
+   "confidence": 0.78,
+   "entities": {
+    "product": "KBN-003",
+    "roast": "decaf"
+   },
+   "ms": 350,
+   "cost": 0.000161406,
+   "contexts": [],
+   "expected": "browse_catalog",
+   "probs": {
+    "product_info": 0.8,
+    "none": 0.09999999999999999,
+    "browse_catalog": 0.07,
+    "ask_recommendation": 0.02,
+    "inform": 0
+   }
+  },
+  "เก็บปลายทางได้ไหมคะ": {
+   "intent": "inform",
+   "confidence": 0.52,
+   "entities": {
+    "payment": "cod"
+   },
+   "ms": 357,
+   "cost": 0.000163548,
+   "contexts": [
+    "ask_payment"
+   ],
+   "expected": "faq.payment_methods",
+   "probs": {
+    "inform": 0.55,
+    "faq.payment_methods": 0.43,
+    "change_order": 0.02,
+    "ask_price": 0,
+    "faq.grinding": 0
+   }
+  },
+  "ขอเปลี่ยนเป็น 3 ถุงค่ะ": {
+   "intent": "change_order",
+   "confidence": 1,
+   "entities": {
+    "product": "KBN-001",
+    "quantity": "3"
+   },
+   "ms": 348,
+   "cost": 0.000172746,
+   "contexts": [
+    "confirm_order"
+   ],
+   "expected": "change_order",
+   "probs": {
+    "change_order": 1,
+    "faq.shipping_fee": 0,
+    "faq.grinding": 0,
+    "browse_catalog": 0,
+    "order_product": 0
+   }
+  },
+  "ใช่ค่ะ ถูกต้อง": {
+   "intent": "affirm",
+   "confidence": 1,
+   "entities": {},
+   "ms": 320,
+   "cost": 0.000172284,
+   "contexts": [
+    "confirm_order"
+   ],
+   "expected": "affirm",
+   "probs": {
+    "affirm": 1,
+    "faq.delivery_time": 0,
+    "ask_recommendation": 0,
+    "order_product": 0,
+    "none": 0
+   }
+  },
+  "ขอบคุณค่ะ แล้วบดให้ด้วยได้ไหมคะ": {
+   "intent": "faq.grinding",
+   "confidence": 0.98,
+   "entities": {},
+   "ms": 305,
+   "cost": 0.000161784,
+   "contexts": [],
+   "expected": "faq.grinding",
+   "probs": {
+    "faq.grinding": 0.99,
+    "change_order": 0.01,
+    "faq.shipping_fee": 0,
+    "faq.payment_methods": 0,
+    "faq.storage": 0
+   }
+  },
+  "เอสเปรสโซ่คั่วเข้มกับดอยแสงเงินต่างกันยังไงครับ": {
+   "intent": "product_info",
+   "confidence": 0.61,
+   "entities": {
+    "product": "KBN-002",
+    "brew": "espresso_milk",
+    "roast": "dark"
+   },
+   "ms": 327,
+   "cost": 0.000162456,
+   "contexts": [],
+   "expected": "product_info",
+   "probs": {
+    "product_info": 0.63,
+    "faq.roast_levels": 0.35,
+    "none": 0.02,
+    "inform": 0,
+    "faq.shipping_fee": 0
+   }
+  },
+  "6 ถุงเลยค่ะ ได้ส่วนลดใช่ไหม": {
+   "intent": "ask_promotion",
+   "confidence": 0.74,
+   "entities": {
+    "quantity": "6"
+   },
+   "ms": 326,
+   "cost": 0.00016212,
+   "contexts": [
+    "ask_quantity"
+   ],
+   "expected": "inform",
+   "probs": {
+    "ask_promotion": 0.76,
+    "order_product": 0.23,
+    "inform": 0.01,
+    "faq.grinding": 0,
+    "browse_catalog": 0
+   }
+  },
+  "ไม่เอาแล้วค่ะ ขอดูตัวอื่น": {
+   "intent": "deny",
+   "confidence": 0.59,
+   "entities": {},
+   "ms": 315,
+   "cost": 0.000170772,
+   "contexts": [
+    "offer_product"
+   ],
+   "expected": "deny",
+   "probs": {
+    "deny": 0.62,
+    "browse_catalog": 0.32,
+    "cancel_order": 0.04,
+    "change_order": 0.02,
+    "inform": 0
+   }
+  }
+ },
+ "products": {
+  "DH-001": {
+   "sku": "DH-001",
+   "name": "Geisha Light Roast 200g (เกอิชา ดอยหอม)",
+   "spoken_name": "เกอิชา",
+   "price": "980",
+   "stock": "6",
+   "product_group": "1",
+   "note": "คั่วอ่อน · ดอกไม้ มะลิ พีช · บอดี้เบา",
+   "description": "เกอิชาจากไร่ดอยหอม ระดับความสูง 1400 เมตร คั่วอ่อน กระบวนการ Washed — กลิ่นดอกไม้ มะลิ พีช ชาเอิร์ลเกรย์ บอดี้เบา เปรี้ยวสดใส อาฟเตอร์เทสต์หวานยาว เหมาะกับ pour-over และ filter สำหรับคาเฟ่ specialty",
+   "keywords": "เกอิชา, geisha, ดอยหอม, คั่วอ่อน, light roast, washed, ดอกไม้, มะลิ, พีช, pour-over, ฟิลเตอร์, specialty, พรีเมียม, แพง, สดชื่น"
+  },
+  "DH-002": {
+   "sku": "DH-002",
+   "name": "Honey Process Medium 200g (ฮันนี่โปรเซส ดอยหอม)",
+   "spoken_name": "ฮันนี่โปรเซส",
+   "price": "420",
+   "stock": "48",
+   "product_group": "1",
+   "note": "คั่วกลาง · โกโก้ น้ำผึ้ง ผลไม้สุก · เข้ากับนม",
+   "description": "ฮันนี่โปรเซสจากไร่ดอยหอม คั่วกลาง — รสโกโก้ น้ำผึ้ง ผลไม้สุก บอดี้กลาง เปรี้ยวนุ่ม อาฟเตอร์เทสต์หวาน เหมาะกับเอสเปรสโซ่และเมนูนม",
+   "keywords": "ฮันนี่, honey, ฮันนี่โปรเซส, ดอยหอม, คั่วกลาง, medium roast, โกโก้, น้ำผึ้ง, เอสเปรสโซ่, ลาเต้, นม, milk-based, ดื่มง่าย"
+  },
+  "DH-003": {
+   "sku": "DH-003",
+   "name": "Natural Anaerobic Light 200g (เนเชอรัล ดอยหอม)",
+   "spoken_name": "เนเชอรัล แอนแอโรบิก",
+   "price": "520",
+   "stock": "21",
+   "product_group": "1",
+   "note": "คั่วอ่อน · เบอร์รี่ ไวน์แดง · เมนูซิกเนเจอร์",
+   "description": "แอนแอโรบิก เนเชอรัล จากไร่ดอยหอม คั่วอ่อน — กลิ่นเบอร์รี่ชัด ไวน์แดง หมักผลไม้ เปรี้ยวสว่าง เหมาะกับเมนูซิกเนเจอร์และกาแฟเย็น specialty",
+   "keywords": "เนเชอรัล, natural, แอนแอโรบิก, anaerobic, เบอร์รี่, ไวน์, หมัก, คั่วอ่อน, ซิกเนเจอร์, กาแฟเย็น, exotic, สดชื่น"
+  },
+  "KBN-001": {
+   "sku": "KBN-001",
+   "name": "House Blend Medium 500g (เฮาส์เบลนด์ คั่วบ้านนา)",
+   "spoken_name": "เฮาส์เบลนด์",
+   "price": "350",
+   "stock": "120",
+   "product_group": "2",
+   "note": "คั่วกลาง · ช็อกโกแลต คาราเมล · ตัวยืนพื้นของร้าน",
+   "description": "เฮาส์เบลนด์จากโรงคั่วคั่วบ้านนา คั่วกลาง — ช็อกโกแลต ถั่ว คาราเมล บอดี้แน่น เปรี้ยวต่ำ สูตรยืนพื้นสำหรับร้านกาแฟทั่วไป ใช้ได้ทั้งร้อนและเย็น",
+   "keywords": "เฮาส์เบลนด์, house blend, เบลนด์, blend, คั่วบ้านนา, คั่วกลาง, ช็อกโกแลต, คาราเมล, ถั่ว, ร้านกาแฟ, ยืนพื้น, ทั่วไป, ราคาประหยัด, ดื่มง่าย"
+  },
+  "KBN-002": {
+   "sku": "KBN-002",
+   "name": "Espresso Dark Roast 500g (เอสเปรสโซ่ คั่วบ้านนา)",
+   "spoken_name": "เอสเปรสโซ่คั่วเข้ม",
+   "price": "380",
+   "stock": "84",
+   "product_group": "2",
+   "note": "คั่วเข้ม · ดาร์กช็อกโกแลต · ครีมม่าแน่น",
+   "description": "เอสเปรสโซ่เบลนด์คั่วเข้มจากคั่วบ้านนา — ดาร์กช็อกโกแลต คาราเมลไหม้ ถั่วคั่ว บอดี้หนัก ครีมม่าแน่น เปรี้ยวต่ำมาก เหมาะกับลาเต้และคาปูชิโน่",
+   "keywords": "เอสเปรสโซ่, espresso, คั่วเข้ม, dark roast, ดาร์กช็อกโกแลต, ครีมม่า, ลาเต้, คาปูชิโน่, บอดี้หนัก, เข้ม, ขม"
+  },
+  "KBN-003": {
+   "sku": "KBN-003",
+   "name": "Decaf Medium 250g (ดีแคฟ คั่วบ้านนา)",
+   "spoken_name": "ดีแคฟ",
+   "price": "300",
+   "stock": "37",
+   "product_group": "2",
+   "note": "คั่วกลาง · ไม่มีคาเฟอีน · ช็อกโกแลตนม",
+   "description": "กาแฟสกัดคาเฟอีนออก คั่วกลาง จากคั่วบ้านนา — ช็อกโกแลตนม คาราเมล บอดี้กลาง เหมาะกับลูกค้าที่เลี่ยงคาเฟอีนและเมนูช่วงเย็น",
+   "keywords": "ดีแคฟ, decaf, ไม่มีคาเฟอีน, สกัดคาเฟอีน, คาเฟอีนต่ำ, คั่วกลาง, ช็อกโกแลต, เด็ก, คนท้อง"
+  },
+  "MM-001": {
+   "sku": "MM-001",
+   "name": "Washed Arabica Light 200g (วอชด์ เมล็ดเมือง)",
+   "spoken_name": "วอชด์ อาราบิก้า",
+   "price": "390",
+   "stock": "62",
+   "product_group": "3",
+   "note": "คั่วอ่อน · ส้ม มะนาว ชาเขียว · สะอาด สดชื่น",
+   "description": "อาราบิก้า Washed จากห้วยน้ำใส คั่วอ่อน — ส้ม มะนาว ชาเขียว บอดี้เบา สะอาด เปรี้ยวสดใส เหมาะกับ pour-over และ cold brew ใส",
+   "keywords": "วอชด์, washed, อาราบิก้า, arabica, ห้วยน้ำใส, คั่วอ่อน, ส้ม, มะนาว, ชาเขียว, สะอาด, pour-over, ซิงเกิลออริจิน, สดชื่น, ดื่มง่าย"
+  },
+  "MM-002": {
+   "sku": "MM-002",
+   "name": "Peaberry Medium 200g (พีเบอร์รี่ เมล็ดเมือง)",
+   "spoken_name": "พีเบอร์รี่",
+   "price": "450",
+   "stock": "15",
+   "product_group": "3",
+   "note": "คั่วกลาง · เชอร์รี่ อัลมอนด์ · ล็อตจำกัด",
+   "description": "พีเบอร์รี่คัดพิเศษจากห้วยน้ำใส คั่วกลาง — เชอร์รี่ อัลมอนด์ น้ำตาลอ้อย บอดี้กลางแน่น หวานติดปลายลิ้น ล็อตจำกัด",
+   "keywords": "พีเบอร์รี่, peaberry, เมล็ดกลม, คัดพิเศษ, ห้วยน้ำใส, คั่วกลาง, เชอร์รี่, อัลมอนด์, ล็อตจำกัด, หายาก"
+  },
+  "MM-003": {
+   "sku": "MM-003",
+   "name": "Cold Brew Blend 500g (โคลด์บรูว์ เมล็ดเมือง)",
+   "spoken_name": "โคลด์บรูว์เบลนด์",
+   "price": "400",
+   "stock": "53",
+   "product_group": "2",
+   "note": "คั่วกลางค่อนเข้ม · ลูกเกด โกโก้ · สำหรับสกัดเย็น",
+   "description": "เบลนด์ออกแบบเฉพาะสำหรับโคลด์บรูว์ คั่วกลางค่อนเข้ม — ลูกเกด กากน้ำตาล โกโก้ บอดี้แน่น หวานธรรมชาติ สกัดเย็น 12-16 ชม.",
+   "keywords": "โคลด์บรูว์, cold brew, สกัดเย็น, กาแฟเย็น, เบลนด์, ลูกเกด, กากน้ำตาล, โกโก้, ฤดูร้อน, สดชื่น"
+  },
+  "MM-004": {
+   "sku": "MM-004",
+   "name": "Single Origin Doi Saeng Ngoen Dark 250g (ดอยแสงเงิน คั่วเข้ม)",
+   "spoken_name": "ดอยแสงเงิน",
+   "price": "340",
+   "stock": "71",
+   "product_group": "3",
+   "note": "คั่วเข้ม · โกโก้เข้ม ยาสูบ · บอดี้หนัก",
+   "description": "ซิงเกิลออริจินจากดอยแสงเงิน คั่วเข้ม — โกโก้เข้ม ยาสูบ น้ำตาลไหม้ บอดี้หนัก เปรี้ยวต่ำ เหมาะกับโมก้าพ็อตและเมนูกาแฟโบราณ",
+   "keywords": "ดอยแสงเงิน, ซิงเกิลออริจิน, single origin, คั่วเข้ม, dark, โกโก้, ยาสูบ, โมก้าพ็อต, กาแฟโบราณ, บอดี้หนัก"
+  }
+ },
+ "faq": {
+  "FAQ-01": {
+   "id": "FAQ-01",
+   "question": "ค่าส่งเท่าไหร่",
+   "answer": "ค่าส่ง 100 บาททั่วประเทศ ส่งฟรีเมื่อสั่งครบ 5 ถุงขึ้นไป จัดส่ง 2-3 วันทำการ",
+   "keywords": "ค่าส่ง, ส่งฟรี, ค่าจัดส่ง, shipping, ส่งของ, กี่วัน, จัดส่ง, ฟรีค่าส่ง, 5 ถุง, 100 บาท"
+  },
+  "FAQ-02": {
+   "id": "FAQ-02",
+   "question": "จ่ายเงินยังไงได้บ้าง",
+   "answer": "รับชำระ 2 แบบ โอนผ่านบัญชีธนาคาร และเก็บเงินปลายทาง (COD) แบบเก็บปลายทางมีค่าบริการเพิ่ม 30 บาทต่อออเดอร์",
+   "keywords": "จ่ายเงิน, ชำระเงิน, โอน, เก็บเงินปลายทาง, cod, ปลายทาง, payment, บัตรเครดิต, ค่าบริการ, 30 บาท"
+  },
+  "FAQ-03": {
+   "id": "FAQ-03",
+   "question": "คั่วอ่อน คั่วกลาง คั่วเข้ม ต่างกันยังไง",
+   "answer": "คั่วอ่อนเปรี้ยวสดใส กลิ่นดอกไม้ผลไม้ชัด เหมาะ pour-over · คั่วกลางสมดุล โกโก้ ถั่ว คาราเมล เข้ากับนมดี · คั่วเข้มขมเข้ม บอดี้หนัก เหมาะเอสเปรสโซ่และกาแฟเย็น",
+   "keywords": "คั่วอ่อน, คั่วกลาง, คั่วเข้ม, ระดับคั่ว, light roast, medium roast, dark roast, ต่างกัน, เลือกยังไง, แนะนำ"
+  },
+  "FAQ-04": {
+   "id": "FAQ-04",
+   "question": "เก็บเมล็ดกาแฟยังไงให้อยู่นาน",
+   "answer": "เก็บในถุงซิปหรือภาชนะทึบแสงปิดสนิท วางที่แห้งเย็น เลี่ยงแดดและความชื้น ห้ามแช่ตู้เย็น ควรบดก่อนชงทุกครั้ง เมล็ดคั่วใหม่ดื่มดีที่สุดภายใน 30 วัน",
+   "keywords": "เก็บ, เก็บรักษา, หมดอายุ, อยู่ได้กี่วัน, ตู้เย็น, ความชื้น, storage, บด, สดใหม่, 30 วัน"
+  },
+  "FAQ-05": {
+   "id": "FAQ-05",
+   "question": "สั่งแล้วได้ของกี่วัน",
+   "answer": "หลังยืนยันออเดอร์และชำระเงิน จัดส่งภายใน 1 วันทำการ ถึงมือลูกค้า 2-3 วันทำการสำหรับกรุงเทพและปริมณฑล ต่างจังหวัด 3-5 วันทำการ",
+   "keywords": "กี่วัน, ได้ของ, ส่งเมื่อไหร่, ระยะเวลา, delivery, ต่างจังหวัด, กรุงเทพ, รอนาน"
+  },
+  "FAQ-06": {
+   "id": "FAQ-06",
+   "question": "มีบดให้ไหม",
+   "answer": "มีค่ะ แจ้งได้ตอนสั่งว่าจะใช้กับอุปกรณ์อะไร เอสเปรสโซ่ ดริป เฟรนช์เพรส หรือโมก้าพอต ทางร้านบดให้ตามความละเอียดที่เหมาะสม ไม่มีค่าใช้จ่ายเพิ่ม",
+   "keywords": "บด, บดให้, grind, ดริป, เฟรนช์เพรส, โมก้าพอต, เอสเปรสโซ่, ละเอียด, หยาบ, อุปกรณ์"
+  },
+  "FAQ-07": {
+   "id": "FAQ-07",
+   "question": "ซื้อขั้นต่ำเท่าไหร่",
+   "answer": "ไม่มีขั้นต่ำในการสั่งซื้อ สั่งกี่ถุงก็ได้ แต่สั่งครบ 5 ถุงจะได้ส่งฟรี",
+   "keywords": "ขั้นต่ำ, สั่งขั้นต่ำ, minimum, กี่ถุง, ซื้อน้อย, ส่งฟรี, 5 ถุง"
+  },
+  "FAQ-08": {
+   "id": "FAQ-08",
+   "question": "เมล็ดคั่วใหม่ไหม",
+   "answer": "ทางร้านคั่วสดตามรอบ ส่งถึงลูกค้าภายใน 7 วันหลังวันคั่ว บนถุงมีวันคั่วระบุไว้ทุกถุง",
+   "keywords": "คั่วใหม่, สด, วันคั่ว, roast date, เก่า, สดใหม่, กี่วันหลังคั่ว"
+  }
+ },
+ "promotions": {
+  "PROMO-01": {
+   "id": "PROMO-01",
+   "title": "ส่งฟรีครบ 5 ถุง",
+   "detail": "สั่งครบ 5 ถุงขึ้นไปในออเดอร์เดียว ส่งฟรีทั่วประเทศ ไม่จำกัดยอดเงิน ใช้ได้ทุกวัน",
+   "keywords": "ส่งฟรี, ค่าส่ง, 5 ถุง, ฟรีค่าส่ง, โปรส่งฟรี, free shipping"
+  },
+  "PROMO-02": {
+   "id": "PROMO-02",
+   "title": "ชุดชิมคั่วอ่อน",
+   "detail": "ซื้อเกอิชาคู่กับเนเชอรัล แอนแอโรบิก รับส่วนลด 80 บาท สำหรับคอกาแฟคั่วอ่อน",
+   "keywords": "ชุดชิม, คั่วอ่อน, เกอิชา, เนเชอรัล, ส่วนลด, เซ็ต, จับคู่, 80 บาท"
+  },
+  "PROMO-03": {
+   "id": "PROMO-03",
+   "title": "เฮาส์เบลนด์ยกลัง",
+   "detail": "ซื้อเฮาส์เบลนด์ 6 ถุงขึ้นไป ลดถุงละ 30 บาท เหมาะสำหรับร้านกาแฟและออฟฟิศ",
+   "keywords": "เฮาส์เบลนด์, ยกลัง, ซื้อเยอะ, ร้านกาแฟ, ออฟฟิศ, ขายส่ง, ลดราคา, 6 ถุง"
+  },
+  "PROMO-04": {
+   "id": "PROMO-04",
+   "title": "ดีแคฟคู่ใจ",
+   "detail": "ซื้อดีแคฟ 2 ถุง แถมถุงผ้าดริปพร้อมชง 1 ใบ ระหว่างเดือนนี้",
+   "keywords": "ดีแคฟ, decaf, ของแถม, ถุงผ้า, ดริป, ไม่มีคาเฟอีน, 2 ถุง"
+  },
+  "PROMO-05": {
+   "id": "PROMO-05",
+   "title": "โปรโมชั่น 8.8 ซื้อหนึ่งแถมหนึ่ง",
+   "detail": "ซื้อสินค้าชนิดใดก็ได้ 1 ถุง รับฟรีอีก 1 ถุง (เฉพาะรายการที่ร่วมรายการ)",
+   "keywords": "โปรโมชั่น, 8.8, ซื้อหนึ่งแถมหนึ่ง"
+  }
+ },
+ "intents": {
+  "greet": {
+   "response": "สวัสดีค่ะ Beanly นะคะ ☕ ขอบคุณที่ทักเข้ามาน้า วันนี้อยากให้แอดช่วยแนะนำเมล็ด หรือมีตัวที่อยากได้แล้วคะ?",
+   "buttons": [
+    "ช่วยแนะนำหน่อย→ask_recommendation",
+    "ดูเมล็ดทั้งหมด→browse_catalog",
+    "มีโปรอะไรบ้าง→ask_promotion"
+   ],
+   "then": "wait",
+   "group": "conversation"
+  },
+  "thanks_bye": {
+   "response": "ขอบคุณที่แวะมานะคะ 🙏🏻 ไม่ urgent น้า ลองดูก่อนได้ สนใจเมื่อไหร่ทักแอดได้เลยค่ะ",
+   "buttons": [
+    "เริ่มใหม่→start_over"
+   ],
+   "then": "wait",
+   "group": "conversation"
+  },
+  "help": {
+   "response": "แอดช่วยแนะนำเมล็ดกาแฟ บอกราคาและโปรโมชั่น ตอบเรื่องค่าส่ง การชำระเงิน การเก็บเมล็ด และรับออเดอร์ได้ค่ะ พิมพ์มาได้เลย หรือเลือกจากด้านล่างน้า",
+   "buttons": [
+    "ช่วยแนะนำหน่อย→ask_recommendation",
+    "ดูเมล็ดทั้งหมด→browse_catalog",
+    "มีโปรอะไรบ้าง→ask_promotion",
+    "ค่าส่งเท่าไหร่→faq.shipping_fee"
+   ],
+   "then": "wait",
+   "group": "conversation"
+  },
+  "start_over": {
+   "response": "(clears every slot and context, then the welcome message)",
+   "buttons": [],
+   "then": "welcome",
+   "group": "conversation"
+  },
+  "browse_catalog": {
+   "response": "ตอนนี้ Beanly มี 10 ตัวจาก 3 โรงคั่วค่ะ — ดอยหอม คั่วบ้านนา และเมล็ดเมือง {if a roast or brew was given: only the matching products, as a list} อยากดูของโรงคั่วไหนคะ? หรือพิมพ์ชื่อตัวที่สนใจมาได้เลยน้า",
+   "buttons": [
+    "ดอยหอม",
+    "คั่วบ้านนา",
+    "เมล็ดเมือง"
+   ],
+   "then": "wait",
+   "group": "shopping"
+  },
+  "ask_recommendation": {
+   "response": "{if brew unknown: เยี่ยมเลยค่ะ — งั้นรบกวนถามต่ออีกนิดน้า จะได้ recommend ตรงค่ะ ปกติชงแบบไหนคะ?} {else if roast unknown: ชอบคั่วระดับไหนคะ?} {else: story bean ก่อนนะคะ — ตัวแรก {A.spoken_name}: {A.note} อีกตัว {B.spoken_name}: {B.note} สนใจตัวไหนคะ?}",
+   "buttons": [
+    "(brew options) or (roast options) or (the two products + ดูตัวอื่น)"
+   ],
+   "then": "wait",
+   "group": "shopping"
+  },
+  "product_info": {
+   "response": "{name} — {description} ราคา {price} บาทค่ะ {if stock is 0: ตอนนี้ของหมดค่ะ ขอโทษด้วยน้า} รับตัวนี้เลยไหมคะ?",
+   "buttons": [
+    "เอาตัวนี้→affirm",
+    "ดูตัวอื่น→browse_catalog"
+   ],
+   "then": "wait",
+   "group": "shopping"
+  },
+  "ask_price": {
+   "response": "{spoken_name} ถุงละ {price} บาทค่ะ ({size}) {if no product is known: ตัวไหนคะ? — then the price list by roaster}",
+   "buttons": [
+    "เอาตัวนี้→affirm",
+    "ดูตัวอื่น→browse_catalog"
+   ],
+   "then": "wait",
+   "group": "shopping"
+  },
+  "ask_promotion": {
+   "response": "ตอนนี้มีโปรตามนี้ค่ะ — {PROMO-01..04: title — detail, one line each; the one matching a named product first}",
+   "buttons": [
+    "ช่วยแนะนำหน่อย→ask_recommendation",
+    "ดูเมล็ดทั้งหมด→browse_catalog"
+   ],
+   "then": "lead",
+   "group": "shopping"
+  },
+  "order_product": {
+   "response": "ได้เลยค่ะ {echo of what was understood: product × quantity} — then the prompt for the first empty slot of the order",
+   "buttons": [
+    "(of the slot being asked)"
+   ],
+   "then": "lead",
+   "group": "shopping"
+  },
+  "inform": {
+   "response": "(no message of its own: the values fill their slots, then the prompt for the next empty slot)",
+   "buttons": [
+    "(of the slot being asked)"
+   ],
+   "then": "lead",
+   "group": "shopping"
+  },
+  "faq.shipping_fee": {
+   "response": "{FAQ-01.answer}",
+   "buttons": [],
+   "then": "resume",
+   "group": "faq"
+  },
+  "faq.payment_methods": {
+   "response": "{FAQ-02.answer}",
+   "buttons": [],
+   "then": "resume",
+   "group": "faq"
+  },
+  "faq.roast_levels": {
+   "response": "{FAQ-03.answer}",
+   "buttons": [],
+   "then": "resume",
+   "group": "faq"
+  },
+  "faq.storage": {
+   "response": "{FAQ-04.answer}",
+   "buttons": [],
+   "then": "resume",
+   "group": "faq"
+  },
+  "faq.delivery_time": {
+   "response": "{FAQ-05.answer}",
+   "buttons": [],
+   "then": "resume",
+   "group": "faq"
+  },
+  "faq.grinding": {
+   "response": "{FAQ-06.answer} กาแฟดีต้องคู่ grind ที่ตรงเสมอค่ะ",
+   "buttons": [],
+   "then": "resume",
+   "group": "faq"
+  },
+  "faq.minimum_order": {
+   "response": "{FAQ-07.answer}",
+   "buttons": [],
+   "then": "resume",
+   "group": "faq"
+  },
+  "faq.freshness": {
+   "response": "{FAQ-08.answer}",
+   "buttons": [],
+   "then": "resume",
+   "group": "faq"
+  },
+  "view_order": {
+   "response": "{the order so far, line by line, with the total in bold; or: ตอนนี้ยังไม่มีรายการในออเดอร์ค่ะ}",
+   "buttons": [],
+   "then": "lead",
+   "group": "order"
+  },
+  "change_order": {
+   "response": "ได้เลยค่ะ {what changed} {if nothing was named: อยากแก้ส่วนไหนคะ?} — then the order read back if the form is complete",
+   "buttons": [
+    "เปลี่ยนสินค้า",
+    "เปลี่ยนจำนวน",
+    "เปลี่ยนวิธีชำระ"
+   ],
+   "then": "lead",
+   "group": "order"
+  },
+  "cancel_order": {
+   "response": "ยกเลิกให้แล้วค่ะ ไม่ urgent น้า ลองดูก่อนได้ สนใจเมื่อไหร่ทักแอดได้เลยค่ะ 🙏🏻",
+   "buttons": [
+    "ดูเมล็ดทั้งหมด→browse_catalog",
+    "เริ่มใหม่→start_over"
+   ],
+   "then": "wait",
+   "group": "order"
+  },
+  "affirm": {
+   "response": "(depends on the context: offer_product → the product is taken, ask quantity · offer_promo → the promotion is applied · confirm_order → ขอบคุณคุณพี่มากค่ะ ☕ รหัสออเดอร์ {BEAN-YYMM-####} …)",
+   "buttons": [
+    "(of the slot being asked) · เริ่มใหม่ after the order is confirmed"
+   ],
+   "then": "lead",
+   "group": "follow_up"
+  },
+  "deny": {
+   "response": "(depends on the context: offer_product → ได้ค่ะ ลองดูตัวอื่นไหมคะ? · offer_promo → ได้เลยค่ะ เอาเท่าเดิมนะคะ, then the next slot · confirm_order → ได้เลยค่ะ อยากแก้ส่วนไหนคะ? หรือจะคิดดูก่อนก็ได้น้า)",
+   "buttons": [
+    "(by context)"
+   ],
+   "then": "lead",
+   "group": "follow_up"
+  },
+  "select_option": {
+   "response": "(the product card of the chosen one — as product_info)",
+   "buttons": [
+    "เอาตัวนี้→affirm",
+    "ดูตัวอื่น→browse_catalog"
+   ],
+   "then": "wait",
+   "group": "follow_up"
+  },
+  "give_delivery_details": {
+   "response": "(the details are stored exactly as typed, then the order is read back)",
+   "buttons": [
+    "ยืนยัน→affirm",
+    "ขอแก้ไข→change_order"
+   ],
+   "then": "lead",
+   "group": "follow_up"
+  }
+ },
+ "fallback": [
+  "ขอโทษด้วยน้า แอดยังจับไม่ได้ว่าหมายถึงแบบไหน ลองพิมพ์อีกครั้งได้ไหมคะ?",
+  "ขอโทษด้วยน้า แอดยังไม่เข้าใจค่ะ ลองเลือกจากด้านล่างดูไหมคะ — then the help buttons"
+ ],
+ "rate": {
+  "thb_per_usd": 34.9,
+  "date": "2026-09-22",
+  "source": "placeholder until recording day"
+ }
+}
