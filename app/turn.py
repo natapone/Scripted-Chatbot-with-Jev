@@ -420,6 +420,13 @@ def drop_context(s: Session, name: str) -> None:
         s.pending_prompt = None
 
 
+def consume_pending(s: Session, entities: dict) -> None:
+    """The slot the bot asked for has been filled: its question is answered, its context goes."""
+    p = s.pending_prompt or {}
+    if p.get("slot") and given(entities, p["slot"]) and p.get("context"):
+        drop_context(s, p["context"])
+
+
 def write_line_qty(s: Session, sku: str, qty: str, product_from: str | None, applied: list) -> None:
     line = rules.line_for(s.order, sku)
     line["qty"] = int(qty) if str(qty).isdigit() else 7          # `more` — the entity's "มากกว่า 6 ถุง"
@@ -509,6 +516,7 @@ def act(s: Session, flow: Flow, intent: str, entities: dict, *, sku: str | None,
 
     elif intent == "inform":
         asked = (s.pending_prompt or {}).get("slot")
+        consume_pending(s, entities)
         wrote_rec = write_recommend(s, entities, applied)
         qty, payment = given(entities, "quantity"), given(entities, "payment")
         if qty and sku:
@@ -527,6 +535,7 @@ def act(s: Session, flow: Flow, intent: str, entities: dict, *, sku: str | None,
 
     elif intent == "order_product":
         qty, payment = given(entities, "quantity"), given(entities, "payment")
+        consume_pending(s, entities)
         if sku and sku in flow.products:
             line = rules.line_for(o, sku)
             if qty:
