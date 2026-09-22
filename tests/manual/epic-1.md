@@ -10,7 +10,8 @@ updated: 2026-09-22
 
 ## Read this first
 
-The walker is the **owner**, as the customer. Written before the build, from the flow page
+The walker is the **owner**, as the customer in §§ 1–4 and as the presenter in § 5 (the speed
+test is started from CU-1's screen; its journey page is PR-1). Written before the build, from the flow page
 [[CU-1]] and the Loop 2c walk records (`prototypes/walks/`), whose control labels and landings were
 proven in a browser against the prototype.
 
@@ -32,7 +33,11 @@ until then this section names what the build must make true. Paths are absolute.
 * **Agent runs**: nothing destructive — the app has no database. It deletes
   `/Users/dong/src/gig_demo/Scripted-Chatbot-with-Jev/var/sessions/*` (session snapshots; nothing
   else lives there) and confirms `OPENROUTER_API_KEY` is present in
-  `/Users/dong/src/gig_demo/Scripted-Chatbot-with-Jev/.env` **without printing it**.
+  `/Users/dong/src/gig_demo/Scripted-Chatbot-with-Jev/.env` **without printing it**. It also runs
+  the two measurements below (0.a, 0.b) and reads them out.
+* **Operator controls, exempt from the surface rule** (like the cold start itself): the model
+  address override that § 4 uses to make Jev unreachable is an operator setting, defined by
+  Story 1.2; the agent flips it on the walker's say-so and says so in the row.
 * **You run, in your own terminal**:
   `cd /Users/dong/src/gig_demo/Scripted-Chatbot-with-Jev && python3.11 -m app` *(the exact command
   is filled by Story 1.1; this is the shape)*. It refuses to start without a key, makes its warm-up
@@ -41,10 +46,16 @@ until then this section names what the build must make true. Paths are absolute.
   line is set by Story 1.1) and the page shows the greeting with three buttons and the key-info
   block at zero.
 
+| Step | Action | Command / Where | Expected |
+|---|---|---|---|
+| 0.a | 🤖 💻 Measure: the repo publishes nothing it should not | `cd /Users/dong/src/gig_demo/Scripted-Chatbot-with-Jev && git status --short --ignored \| grep -E '^\?\?' ; git check-ignore -v .env var/sessions/probe 2>/dev/null` | No `??` line; `.env` and `var/` reported ignored (NFR1, NFR8, NFR10) |
+| 0.b | 🤖 💻 Measure: the key is in no served or committed file | `cd /Users/dong/src/gig_demo/Scripted-Chatbot-with-Jev && python3 -c "import re,subprocess;k=re.search(r'OPENROUTER_API_KEY=(\S+)',open('.env').read()).group(1);print(subprocess.run(['grep','-rl','--exclude-dir=.git','--exclude=.env','--exclude-dir=var',k,'.'],capture_output=True,text=True).stdout or 'clean')"` | `clean` (AC-8) |
+
 | Hazard | What goes wrong |
 |---|---|
 | Every typed turn and every speed-test message is a paid call to Jev | Spend counts against the owner's $1.00 cap; a 1,000 run costs about $0.16. § 5 at 100 costs about $0.016 |
 | The speed test at 1,000 | Only when the owner says so; § 5 runs at **100** |
+| The spend cap | Cannot be walked without spending the cap. The cap's behaviour (typed turns pause, Start refused with the room left) is proven in Story 1.7's rehearsal with a **temporarily lowered cap**, recorded in the dry-walk file — stated here so it is not mistaken for walked |
 | Jev's API can return empty answers (S-3 saw 57 in a row) | The turn shows MODEL FAILED and nothing else changes; that is the designed behaviour, not a finding — unless the order changed |
 
 ## § 1 — The bot leads: greeting to a confirmed order
@@ -64,14 +75,15 @@ reads `— · ฿0.000 · 0`, no panel rows.
 | 1.6 | 👤 🌐 Click **ไม่เป็นไร เอาเท่าเดิม** (if offered) | the page | Beanly states the shipping fee and asks how to pay |
 | 1.7 | 👤 🌐 Type **โอนเอาค่ะ** | composer | Row `inform · payment transfer`; Beanly asks for name, address, phone and says made-up details are fine |
 | 1.8 | 👤 🌐 Type a fictional name, address and phone | composer | The read-back shows **your text**; the panel row reads `[delivery details]`; the order table has one line, shipping, total in bold |
-| 1.9 | 👤 💻 Measure: the snapshot file holds the address and the log does not | `grep -c "delivery" /Users/dong/src/gig_demo/Scripted-Chatbot-with-Jev/var/sessions/*.json` and `grep -c "<the street you typed>" /Users/dong/src/gig_demo/Scripted-Chatbot-with-Jev/var/sessions/*.json` | The first ≥ 1 (the log's masked entries); the second exactly 1 (`delivery_text`) |
-| 1.10 | 👤 🌐 Click **ยืนยัน** | the page | Order code `BEAN-YYMM-####`; only **เริ่มใหม่** live; key-info shows the turn count and a total cost around ฿0.02 |
+| 1.9 | 🤖 💻 Measure: the address is held only in `delivery_text` — not in the log, not in any request | `cd /Users/dong/src/gig_demo/Scripted-Chatbot-with-Jev && python3 -c "import json,glob,os;f=max(glob.glob('var/sessions/*.json'),key=os.path.getmtime);d=json.load(open(f));a=d['order']['delivery_text'];s=json.dumps(d['log'],ensure_ascii=False);print('delivery_text set:',bool(a),'| in log:',(a[:12] in s) if a else None,'| masked entries:',s.count('[delivery details]'))"` | `delivery_text set: True \| in log: False \| masked entries: 1` (NFR10). The agent runs it; the walker does not retype the address |
+| 1.10 | 👤 🌐 Click **ยืนยัน** | the page | Order code `BEAN-YYMM-####`; only **เริ่มใหม่** live. Key-info: **AVG RESPONSE** a few hundred ms, **TOTAL COST** ≈ 4 turns × $0.000165 × the rate, **TOTAL TURNS** 10. The panel header shows `jev-1.13`, `● live`, and the rate with its date (FR13, FR14, NFR3) |
 | 1.11 | 👤 🌐 Click **open** on the newest panel row | the page | The viewer: what was sent (`shop_said`, `customer_said`, `awaiting`, `history`), what came back (with `t_sent → t_received` to the millisecond), what the bot did. **It does not cover the key-info block** |
 | 1.12 | 👤 🌐 Reload the page | browser | **The same conversation is back** — transcript, dead buttons, rows, key-info unchanged (FR25) |
+| 1.13 | 🤖 💻 then 👤 🌐 Stop the server (Ctrl-C in its terminal), start it again with the same command, reload | terminal, browser | **The same conversation is back from its snapshot** — the restart half of FR25 |
 
 ## § 2 — The customer leads: one sentence
 
-**Preconditions as data:** a fresh session (click **เริ่มใหม่**).
+**Preconditions as data:** a fresh session — reached by **typing** `เริ่มใหม่` (the intent, FR9), not the button.
 
 `Executed: [ ]  ·  Result: [ ]`
 
@@ -81,20 +93,24 @@ reads `— · ฿0.000 · 0`, no panel rows.
 | 2.2 | 👤 🌐 Type **ไม่ครับ** | composer | Beanly skips straight to delivery details |
 | 2.3 | 👤 🌐 Click **ใช้ข้อมูลตัวอย่าง** | the page | Read-back: 3 × 380 + 100 shipping + 30 COD = **1,270** |
 | 2.4 | 👤 🌐 Type **โอเคครับ เอาตามนี้เลย** | composer | Order code — four typed turns |
+| 2.5 | 👤 🌐 Click **เริ่มใหม่**, then click **มีโปรอะไรบ้าง** | the page | The four promotions listed, no model call; then click **ดูเมล็ดทั้งหมด** → the three roasters (FR2's other two greeting buttons) |
 
 ## § 3 — A question in the middle, and a change at the end
 
-**Preconditions as data:** a fresh session.
+**Preconditions as data:** a fresh session (click **เริ่มใหม่**).
 
 `Executed: [ ]  ·  Result: [ ]`
 
 | Step | Action | Command / Where | Expected |
 |---|---|---|---|
-| 3.1 | 👤 🌐 Type **เกอิชาถุงละเท่าไหร่คะ**, then **เอาค่ะ** | composer | The price; then the quantity question. `เอาค่ะ` is a `matched affirm` — not a fallback |
+| 3.0 | 👤 🌐 Type **ช่วยแนะนำหน่อยค่ะ**, then **ดริปค่ะ**, then **คั่วอ่อน** | composer | Beanly asks brew, then roast — the lead in the SOP's order (FR2) — then recommends **เกอิชา** and **วอชด์ อาราบิก้า** (filter + light) |
+| 3.1 | 👤 🌐 Type **ตัวแรกค่ะ**, then **เอาค่ะ** | composer | The Geisha card; then the quantity question. `เอาค่ะ` is a `matched affirm` — not a fallback |
 | 3.2 | 👤 🌐 Type **ค่าส่งเท่าไหร่คะ** | composer | The prepared shipping answer, **then the quantity question again**; the order unchanged |
 | 3.3 | 👤 🌐 Type **1 ถุงค่ะ** | composer | Row `inform · by state (awaiting quantity)`, quantity 1 on the Geisha line — provenance says the product came from context. The Geisha + Natural Anaerobic promotion is offered |
-| 3.4 | 👤 🌐 Click the promotion, click **เก็บเงินปลายทาง**, click **ใช้ข้อมูลตัวอย่าง** | the page | Read-back with two lines, the 80-baht discount, COD fee |
+| 3.4 | 👤 🌐 Type **ตอนนี้สั่งอะไรไปบ้างคะ** | composer | `view_order`: the order so far — one Geisha line — and the quantity is not re-asked (FR24) |
+| 3.4b | 👤 🌐 Click the promotion, click **เก็บเงินปลายทาง**, click **ใช้ข้อมูลตัวอย่าง** | the page | Read-back with two lines, the 80-baht discount, COD fee |
 | 3.5 | 👤 🌐 Type **ขอเปลี่ยนเป็น 3 ถุงค่ะ** | composer | The **Geisha** line becomes 3 — no new line; the order is read back again with the new total |
+| 3.5b | 👤 🌐 Type **เดี๋ยวก่อนนะ ขอคิดดูก่อน** | composer | `deny` under the read-back: Beanly asks what to change, without pressing; the order stands (CU-1's hesitation branch) |
 | 3.6 | 👤 🌐 Click **ยืนยัน** | the page | Order code |
 
 ## § 4 — When Jev does not understand, and when it is unreachable
@@ -107,10 +123,10 @@ reads `— · ฿0.000 · 0`, no panel rows.
 |---|---|---|---|
 | 4.1 | 👤 🌐 Type **มีหน้าร้านไหมคะ** | composer | A **FALLBACK** row (intent `none` or a low-confidence pick, shown); Beanly apologises and shows the same buttons; nothing else changes |
 | 4.2 | 👤 🌐 Type **รับสมัครพนักงานไหมครับ** | composer | The second apology and the help buttons |
-| 4.3 | 🤖 💻 Agent breaks the model address for one turn | the server's `--jev-url` override, or an env var, as Story 1.2 defines it | *(the walker does not do this; the agent does, on the walker's say-so)* |
-| 4.4 | 👤 🌐 Type anything | composer | A **MODEL FAILED · HTTP …** row at ฿0; Beanly says it cannot reach the model; every button still works; key-info shows `● unreachable` |
-| 4.5 | 👤 🌐 Click any live button | the page | Works |
+| 4.3 | 🤖 💻 Agent flips the operator control that makes Jev unreachable (§ 0), on the walker's say-so | the operator control Story 1.2 defines | *(an operator control, exempt like the cold start)* |
+| 4.4 | 👤 🌐 Type anything, then click any live button | composer, the page | A **MODEL FAILED · HTTP …** row at ฿0; Beanly says it cannot reach the model; key-info shows `● unreachable`; the click works — no model needed |
 | 4.6 | 🤖 💻 Agent restores the address; 👤 types again | composer | A normal row; the `unreachable` line is gone |
+| 4.7 | 👤 🌐 Type **เอาเฮาส์เบลนด์ 2 ถุงค่ะ**, then **ยกเลิกออเดอร์ค่ะ** | composer | A line is added, then `cancel_order` clears it: Beanly confirms, no order remains, the greeting-style buttons return (FR24) |
 
 ## § 5 — The speed test, at 100
 
@@ -123,8 +139,8 @@ reads `— · ฿0.000 · 0`, no panel rows.
 |---|---|---|---|
 | 5.1 | 👤 🌐 Click **speed test ▾** | header | A popover: **100 rehearsal** preselected · 1,000 demo · Start. The screen otherwise unchanged |
 | 5.2 | 👤 🌐 Click **Start** | popover | Messages stream **as chat** — customer bubbles and Beanly's replies — with panel rows beside them; a status line above the composer counts; the key-info block counts. It looks like the chat, very fast |
-| 5.3 | 👤 🌐 Watch it finish | the page | Under about 3 s; the status line holds `100 answered in … · …/s · … correct · ฿…`; key-info at 100 turns and about ฿0.6 |
-| 5.4 | 👤 💻 Measure: every one of the 100 is in the log with millisecond timestamps | `python3 -c "import json,glob; d=json.load(open(sorted(glob.glob('/Users/dong/src/gig_demo/Scripted-Chatbot-with-Jev/var/sessions/*.json'))[-1])); print(len(d['log']), d['log'][-1]['jev']['t_sent'], d['log'][-1]['jev']['t_received'])"` | `100`, and two ISO timestamps with milliseconds |
+| 5.3 | 👤 🌐 Watch it finish | the page | Under 2 s (S-4: 79/s); the status line holds `100 answered in … s · …/s · N correct`, with N ≥ 90 (S-4 measured 97.3%; FR26 shows the share); key-info at 100 turns and a cost of 100 × ≈$0.000165 × the rate |
+| 5.4 | 🤖 💻 Measure: every one of the 100 is in the log with millisecond timestamps, committed in order | `cd /Users/dong/src/gig_demo/Scripted-Chatbot-with-Jev && python3 -c "import json,glob,os;f=max(glob.glob('var/sessions/*.json'),key=os.path.getmtime);d=json.load(open(f));L=[e for e in d['log'] if e.get('batch')];print(len(L),L[-1]['jev']['t_sent'],L[-1]['jev']['t_received'],[e['turn_no'] for e in L]==sorted(e['turn_no'] for e in L))"` | `100 <ISO ms> <ISO ms> True` |
 | 5.5 | 👤 🌐 Click **เริ่มใหม่** | header | Greeting; key-info at zero; status line gone |
 
 ## Findings
