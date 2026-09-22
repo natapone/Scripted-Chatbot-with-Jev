@@ -25,4 +25,5 @@ venv/
 .DS_Store
 *.log
 /prototypes/walks/evidence/*.png
+/prototypes/walks/evidence/*.jpg
 /prototypes/walks/evidence/*.gif
