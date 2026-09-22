@@ -219,13 +219,18 @@ class ConfigSwitchTests(unittest.TestCase):
                 unittest.mock.patch.object(jev, "warm_up", spy), contextlib.redirect_stdout(out):
             code = main(environ={**self.GOOD, "PORT": "8768", "JEV_HOST": "127.0.0.1:1"}, env_path=self.NO_ENV_FILE)
         self.assertEqual(code, 0)
-        self.assertEqual(seen, [{"host": "127.0.0.1:1", "timeout": 10.0}])
+        # Story 1.3: the warm-up also goes through the server's kept-alive client, built on the same host
+        self.assertEqual(len(seen), 1)
+        self.assertEqual((seen[0]["host"], seen[0]["timeout"]), ("127.0.0.1:1", 10.0))
+        self.assertIsInstance(seen[0]["client"], jev.Client)
+        self.assertEqual((seen[0]["client"].host, seen[0]["client"].timeout), ("127.0.0.1:1", 10.0))
         self.assertEqual(out.getvalue().strip(), "ready · warm-up 0 · http://127.0.0.1:8768")
         seen.clear()
         with unittest.mock.patch.object(server, "make_server", make_and_stop), \
                 unittest.mock.patch.object(jev, "warm_up", spy), contextlib.redirect_stdout(io.StringIO()):
             main(environ={**self.GOOD, "PORT": "8768"}, env_path=self.NO_ENV_FILE)
-        self.assertEqual(seen, [{"host": "openrouter.ai", "timeout": 10.0}])   # without the variable: 1.1's call
+        self.assertEqual((seen[0]["host"], seen[0]["timeout"]), ("openrouter.ai", 10.0))   # without the variable: 1.1's call
+        self.assertEqual(seen[0]["client"].host, "openrouter.ai")
         # the real warm-up against the dead port: status 0, printed the same way, under a second
         t0 = time.perf_counter()
         out = io.StringIO()

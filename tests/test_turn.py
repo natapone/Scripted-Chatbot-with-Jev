@@ -214,6 +214,38 @@ def labels(buttons):
     return [b["label"] for b in buttons]
 
 
+class TextTests(unittest.TestCase):
+    def test_catalogue_text_and_buttons_as_written(self):  # Scope boundary: placeholders and notes stripped
+        self.assertEqual(turn.strip_text("{spoken_name} ถุงละ {price} บาทค่ะ ({size}) {if no product: ตัวไหนคะ? — then the list}"), "ถุงละ บาทค่ะ")
+        self.assertEqual(turn.strip_text("ได้เลยค่ะ {echo} — then the prompt for the first empty slot"), "ได้เลยค่ะ")
+        self.assertEqual(turn.strip_text("{a {nested} one} x"), "x")
+        self.assertEqual(turn.strip_text("(a note only)"), "")
+        self.assertEqual(turn.strip_text(FLOW.fallback["ladder"][1]), "ขอโทษด้วยน้า แอดยังไม่เข้าใจค่ะ ลองเลือกจากด้านล่างดูไหมคะ")
+        self.assertEqual(turn.strip_text(FLOW.fallback["ladder"][0]), FLOW.fallback["ladder"][0])
+        # fill: the product row's values go in after the strip, so a name's own parentheses survive
+        p = FLOW.products["DH-001"]
+        self.assertEqual(turn.fill(turn.flow_intent(FLOW, "ask_price")["response"], p), f'{p["spoken_name"]} ถุงละ {p["price"]} บาทค่ะ')
+        self.assertIn("(เกอิชา ดอยหอม)", turn.fill("{name}!", p))
+        self.assertEqual(turn.fill("{name} {unknown}", {"name": "x"}), "x")
+        # clause: one `{marker: …}` of a response
+        rec = turn.flow_intent(FLOW, "ask_recommendation")["response"]
+        self.assertEqual(turn.clause(rec, "if brew unknown"), "เยี่ยมเลยค่ะ — งั้นรบกวนถามต่ออีกนิดน้า จะได้ recommend ตรงค่ะ ปกติชงแบบไหนคะ?")
+        self.assertEqual(turn.clause(rec, "else if roast unknown"), "ชอบคั่วระดับไหนคะ?")
+        self.assertEqual(turn.clause(rec, "nope"), "")
+        # buttons: label→intent; a bare label fires the intent itself; a note is no button
+        self.assertEqual(turn.buttons_of({"id": "x", "buttons": ["เอาตัวนี้→affirm", "ดอยหอม", "(of the slot)", "(a) or (b)"]}),
+                         [{"label": "เอาตัวนี้", "intent": "affirm", "params": {}}, {"label": "ดอยหอม", "intent": "x", "params": {}}])
+        self.assertEqual([b["intent"] for b in turn.help_buttons(FLOW)], ["ask_recommendation", "browse_catalog", "ask_promotion", "faq.shipping_fee"])
+        # every intent yields a non-empty text and no `{`-placeholder unless the whole response was one
+        for it in FLOW.intents:
+            text = turn.strip_text(it["response"]) or it["response"]
+            self.assertTrue(text, it["id"])
+            if "{" in text:
+                self.assertTrue(it["response"].startswith(("{", "(")), it["id"])
+        with self.assertRaises(KeyError):
+            turn.flow_intent(FLOW, "nope")
+
+
 class RunTurnTests(unittest.TestCase):
     def test_matched_product_info_commits_whole(self):  # AC-3 and the traced turn 1
         r = Rig(self, (200, reply("product_info", 0.95, product="DH-001", rid="gen-p")),

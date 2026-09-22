@@ -34,6 +34,8 @@ the rate is missing. `PORT=8766 python3.11 -m app` starts a second, throwaway in
 
 Tests (no network, no Jev): `python3.11 -m unittest discover -s tests -t . -v`
 
+The conversation is reachable without the page: `GET /api/session?id=` starts or restores a session, `POST /api/turn` sends one typed or clicked message (see `memory/project/stories/story-1.3-session-and-turn-loop.md` for the shapes); snapshots live in `var/sessions/`, never committed.
+
 The spike can still be re-run (about $0.004 of OpenRouter credit):
 
 ```
