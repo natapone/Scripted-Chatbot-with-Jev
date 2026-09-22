@@ -1,0 +1,178 @@
+"""Story 1.2 — the Jev client. Hermetic: the connection is a fake and the clock is fixed; one test
+opens a loopback connection to a dead port (127.0.0.1:1) and nothing else touches a socket."""
+from __future__ import annotations
+
+import dataclasses
+import json
+import re
+import time
+import unittest
+from datetime import datetime, timedelta, timezone
+
+from app import flow, jev
+
+FAKE_KEY = "sk-or-v1-test-key-never-real"
+STAMP = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$")
+T0 = datetime(2026, 9, 22, 6, 48, 10, 418_000, tzinfo=timezone.utc)
+
+GOOD_REPLY = {
+    "id": "gen-dec-0001",
+    "answers": {
+        "intent": {"type": "choice", "choice": "inform", "confidence": 0.99,
+                   "probabilities": {"inform": 0.99, "order_product": 0.01}},
+        "product": {"type": "choice", "choice": "not_mentioned"},
+        "quantity": {"type": "choice", "choice": "1"},
+        "brew": {"type": "choice", "choice": "not_mentioned"},
+        "roast": {"type": "choice", "choice": "not_mentioned"},
+        "payment": {"type": "choice", "choice": "not_mentioned"},
+    },
+    "usage": {"cost": 0.000164},
+}
+
+
+def fake(status=200, reply=None, raise_=None):
+    """A stand-in for http.client.HTTPSConnection: records the request, returns one canned answer."""
+    sent = []
+
+    class Fake:
+        def __init__(self, host, port=None, timeout=None):
+            self.host, self.port, self.timeout = host, port, timeout
+
+        def request(self, method, path, body=None, headers=None):
+            if raise_:
+                raise raise_
+            sent.append({"host": self.host, "port": self.port, "timeout": self.timeout, "method": method,
+                         "path": path, "body": json.loads(body), "headers": dict(headers)})
+
+        def getresponse(self):
+            class R:
+                pass
+            r = R()
+            r.status = status
+            r.read = lambda: json.dumps(reply).encode("utf-8") if reply is not None else b""
+            return r
+
+        def close(self):
+            pass
+    Fake.sent = sent
+    return Fake
+
+
+def ticking(*times):
+    """A clock that returns the given datetimes in order."""
+    it = iter(times)
+    return lambda: next(it)
+
+
+class AskTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.body = flow.load().build_request("รับกี่ถุงดีคะ?", "1 ถุงค่ะ", "quantity", [], ["ask_quantity"])
+
+    def test_ask_types_the_answer(self):  # AC-3
+        conn = fake(200, GOOD_REPLY)
+        a = jev.ask(FAKE_KEY, self.body, connection=conn, clock=ticking(T0, T0 + timedelta(milliseconds=338)))
+        self.assertIsInstance(a, jev.JevAnswer)
+        self.assertEqual((a.status, a.intent, a.confidence), (200, "inform", 0.99))
+        self.assertEqual(a.probabilities, {"inform": 0.99, "order_product": 0.01})
+        self.assertEqual(a.entities, {"product": "not_mentioned", "quantity": "1", "brew": "not_mentioned",
+                                      "roast": "not_mentioned", "payment": "not_mentioned"})
+        self.assertEqual(a.cost_usd, 0.000164)
+        self.assertEqual(a.request_id, "gen-dec-0001")
+        self.assertIsNone(a.error)
+        self.assertEqual(a.raw, GOOD_REPLY)
+        # stamps: ISO-8601 UTC with milliseconds; ms is their difference and nothing else
+        self.assertEqual(a.t_sent, "2026-09-22T06:48:10.418Z")
+        self.assertEqual(a.t_received, "2026-09-22T06:48:10.756Z")
+        self.assertTrue(STAMP.match(a.t_sent) and STAMP.match(a.t_received))
+        self.assertEqual(a.ms, 338)
+        self.assertIsInstance(a.ms, int)
+        sent_dt = datetime.strptime(a.t_sent, "%Y-%m-%dT%H:%M:%S.%fZ")
+        recv_dt = datetime.strptime(a.t_received, "%Y-%m-%dT%H:%M:%S.%fZ")
+        self.assertEqual(a.ms, round((recv_dt - sent_dt).total_seconds() * 1000))
+        # a naive or non-UTC clock is stamped in UTC; a difference across a second boundary is exact
+        b = jev.ask(FAKE_KEY, self.body, connection=conn,
+                    clock=ticking(datetime(2026, 9, 22, 13, 48, 59, 900_500, tzinfo=timezone(timedelta(hours=7))),
+                                  datetime(2026, 9, 22, 13, 49, 0, 250_000, tzinfo=timezone(timedelta(hours=7)))))
+        self.assertEqual((b.t_sent, b.t_received, b.ms), ("2026-09-22T06:48:59.900Z", "2026-09-22T06:49:00.250Z", 350))
+        self.assertEqual(jev.stamp(datetime(2026, 1, 2, 3, 4, 5, 6_000)), "2026-01-02T03:04:05.006Z")
+        # exactly one request each, the flow's body, to OpenRouter, the key in the header only
+        self.assertEqual(len(conn.sent), 2)
+        req = conn.sent[0]
+        self.assertEqual((req["host"], req["port"], req["method"], req["path"]),
+                         ("openrouter.ai", None, "POST", "/api/v1/systemone"))
+        self.assertEqual(req["timeout"], 10)
+        self.assertEqual(req["body"], self.body)
+        self.assertEqual(req["body"]["state"]["awaiting"], "quantity")
+        self.assertEqual(req["headers"]["Authorization"], f"Bearer {FAKE_KEY}")
+        self.assertNotIn(FAKE_KEY, json.dumps(req["body"]))
+        # the answer is frozen
+        with self.assertRaises(dataclasses.FrozenInstanceError):
+            a.intent = "x"
+
+    def test_ask_200_without_answers_is_empty(self):  # AC-4, the S-2/S-3 API fault
+        for reply in ({}, {"id": "gen-x", "usage": {"cost": 0.0001}}, {"answers": {}}, {"answers": None},
+                      {"error": {"message": "upstream"}}):
+            a = jev.ask(FAKE_KEY, self.body, connection=fake(200, reply), clock=ticking(T0, T0 + timedelta(milliseconds=5)))
+            self.assertEqual((a.status, a.error, a.intent, a.confidence), (200, "empty", None, None), reply)
+            self.assertEqual(a.entities, {}, reply)
+            self.assertEqual(a.ms, 5)
+        a = jev.ask(FAKE_KEY, self.body, connection=fake(200, {"id": "gen-x", "usage": {"cost": 0.0001}}),
+                    clock=ticking(T0, T0))
+        self.assertEqual((a.cost_usd, a.request_id), (0.0001, "gen-x"))   # what came back is still kept
+        # an empty body, or one that is not JSON, is the same fault
+        a = jev.ask(FAKE_KEY, self.body, connection=fake(200, None), clock=ticking(T0, T0))
+        self.assertEqual((a.status, a.error, a.raw), (200, "empty", {}))
+        # a non-200 is `http`, with the status kept
+        for status in (400, 401, 429, 500, 502):
+            a = jev.ask(FAKE_KEY, self.body, connection=fake(status, {"error": {"message": "no"}}),
+                        clock=ticking(T0, T0))
+            self.assertEqual((a.status, a.error, a.intent), (status, "http", None), status)
+
+    def test_ask_no_response_is_status_0(self):  # AC-4, E-002
+        for exc in (ConnectionRefusedError("refused"), TimeoutError("timed out"), OSError("dns")):
+            a = jev.ask(FAKE_KEY, self.body, connection=fake(raise_=exc),
+                        clock=ticking(T0, T0 + timedelta(seconds=10)))
+            self.assertEqual((a.status, a.error, a.intent, a.confidence), (0, type(exc).__name__, None, None))
+            self.assertEqual((a.entities, a.probabilities, a.cost_usd, a.request_id), ({}, {}, 0.0, None))
+            self.assertEqual(a.ms, 10_000)
+            self.assertTrue(STAMP.match(a.t_sent) and STAMP.match(a.t_received))
+        # the default clock is real and UTC, and stamps parse
+        a = jev.ask(FAKE_KEY, self.body, connection=fake(raise_=ConnectionRefusedError()))
+        self.assertTrue(STAMP.match(a.t_sent))
+        self.assertGreaterEqual(a.ms, 0)
+        self.assertLess(a.ms, 1000)
+
+    def test_key_is_in_no_field_and_no_repr(self):  # NFR1
+        for conn in (fake(200, GOOD_REPLY), fake(200, {}), fake(500, {"error": "x"}),
+                     fake(raise_=ConnectionRefusedError(FAKE_KEY))):
+            a = jev.ask(FAKE_KEY, self.body, connection=conn, clock=ticking(T0, T0))
+            self.assertNotIn(FAKE_KEY, repr(a))
+            self.assertNotIn(FAKE_KEY, str(a))
+            self.assertNotIn("Bearer", repr(a))
+            for f in dataclasses.fields(a):
+                self.assertNotIn(FAKE_KEY, json.dumps(getattr(a, f.name), ensure_ascii=False, default=str), f.name)
+            self.assertNotIn(FAKE_KEY, json.dumps(dataclasses.asdict(a), ensure_ascii=False, default=str))
+        self.assertNotIn("raw", repr(a))   # the body is kept for the viewer, not for the log line
+        self.assertNotIn("key", {f.name for f in dataclasses.fields(jev.JevAnswer)})
+
+
+class DeadAddressTests(unittest.TestCase):
+    def test_dead_port_fails_fast(self):  # AC-5's switch: the one loopback connection in the suite
+        t0 = time.perf_counter()
+        a = jev.ask(FAKE_KEY, {"model": "typesafe/jev-1.13", "state": {}, "questions": {}}, host="127.0.0.1:1")
+        elapsed = time.perf_counter() - t0
+        self.assertEqual((a.status, a.error, a.intent), (0, "ConnectionRefusedError", None))
+        self.assertLess(elapsed, 1.0)
+        self.assertLess(a.ms, 1000)
+        self.assertEqual(jev.post(FAKE_KEY, {}, host="127.0.0.1:1"), (0, {"error": "ConnectionRefusedError"}))
+        # the host string carries the port; a bare host uses the class's default port
+        conn = fake(200, GOOD_REPLY)
+        jev.post(FAKE_KEY, {}, conn, host="example.test:8443", timeout=3)
+        self.assertEqual((conn.sent[0]["host"], conn.sent[0]["port"], conn.sent[0]["timeout"]), ("example.test", 8443, 3))
+        jev.post(FAKE_KEY, {}, conn)
+        self.assertEqual((conn.sent[1]["host"], conn.sent[1]["port"], conn.sent[1]["timeout"]), ("openrouter.ai", None, 10))
+
+
+if __name__ == "__main__":
+    unittest.main()
