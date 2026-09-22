@@ -7,7 +7,12 @@ import io
 import unittest
 from pathlib import Path
 
-from app import config
+import http.client
+import json
+import socket
+import threading
+
+from app import config, server
 from app.__main__ import main
 
 FAKE_KEY = "sk-or-v1-test-key-never-real"
@@ -63,6 +68,84 @@ class ConfigTests(unittest.TestCase):
             self.assertEqual(config.load(env_path=env, environ={"THB_PER_USD": "36"}).thb_per_usd, 36.0)
         finally:
             env.unlink()
+
+
+class ServerTests(unittest.TestCase):
+    """The real server on an ephemeral port, driven with http.client — no network beyond loopback."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.httpd = server.make_server(load(GOOD), port=0)
+        cls.port = cls.httpd.server_address[1]
+        cls.thread = threading.Thread(target=cls.httpd.serve_forever, daemon=True)
+        cls.thread.start()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.httpd.shutdown()
+        cls.httpd.server_close()
+
+    def get(self, path):
+        conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
+        try:
+            conn.request("GET", path)
+            r = conn.getresponse()
+            return r.status, r.getheader("Content-Type") or "", r.read()
+        finally:
+            conn.close()
+
+    def test_serves_index_and_assets(self):
+        status, ctype, body = self.get("/")
+        self.assertEqual(status, 200)
+        self.assertTrue(ctype.startswith("text/html"))
+        self.assertEqual(body, (server.STATIC / "index.html").read_bytes())
+        status, ctype, body = self.get("/assets/design-system.css")
+        self.assertEqual(status, 200)
+        self.assertTrue(ctype.startswith("text/css"))
+        self.assertEqual(body, (server.STATIC / "assets" / "design-system.css").read_bytes())
+        self.assertNotIn(FAKE_KEY.encode(), body)
+
+    def test_api_config(self):
+        status, ctype, body = self.get("/api/config")
+        self.assertEqual(status, 200)
+        self.assertTrue(ctype.startswith("application/json"))
+        self.assertEqual(json.loads(body), {"model": "typesafe/jev-1.13", "thb_per_usd": 34.9,
+                                            "rate_date": "2026-09-22"})
+        self.assertNotIn(FAKE_KEY.encode(), body)  # NFR1: the key never reaches the browser
+
+    def test_api_health(self):
+        status, _, body = self.get("/api/health")
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body), {"ok": True})
+
+    def test_404_and_traversal_refused(self):
+        for path in ("/nope", "/api/nope", "/assets/", "/assets/missing.css", "/index.html/..",
+                     "/.env", "/assets/../.env", "/assets/../../.env", "/assets/..%2F..%2F.env",
+                     "/assets/%2e%2e/%2e%2e/.env", "/assets/../server.py", "/app/config.py"):
+            status, _, body = self.get(path)
+            self.assertEqual(status, 404, path)
+            self.assertNotIn(b"OPENROUTER", body, path)
+        self.assertIsNone(server.static_path("/assets/../../.env"))
+        self.assertIsNone(server.static_path("/../.env"))
+
+    def test_binds_localhost_only(self):
+        self.assertEqual(self.httpd.socket.getsockname()[0], "127.0.0.1")
+        other = server.make_server(load({**GOOD, "PORT": "0"}))  # cfg.port honoured, host fixed
+        try:
+            self.assertEqual(other.socket.getsockname()[0], "127.0.0.1")
+        finally:
+            other.server_close()
+        # when this machine has a non-loopback address, the same port is closed there
+        try:
+            probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            probe.connect(("10.255.255.255", 1))  # no packet is sent; picks the outbound interface
+            host = probe.getsockname()[0]
+            probe.close()
+        except OSError:
+            host = "127.0.0.1"
+        if not host.startswith("127."):
+            with self.assertRaises(OSError):
+                socket.create_connection((host, self.port), timeout=1).close()
 
 
 if __name__ == "__main__":
