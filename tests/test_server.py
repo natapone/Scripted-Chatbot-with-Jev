@@ -105,7 +105,8 @@ class ServerTests(unittest.TestCase):
         self.assertTrue(ctype.startswith("text/css"))
         self.assertEqual(body, (server.STATIC / "assets" / "design-system.css").read_bytes())
         self.assertNotIn(FAKE_KEY.encode(), body)
-        # the served page is the approved prototype: its tokens, the model id, and the mark
+        # the served page is the approved prototype's screen: its tokens and the model id. Story
+        # 1.3b wired it — the title lost "— prototype", the mark is gone (tests/test_static.py)
         html = self.get("/")[2].decode("utf-8")
         for token in ("composer", "send", "start-over", "key-info", "avg-ms", "total-baht",
                       "total-turns", "viewer", "viewer-close", "rate", "model-status", "band-top",
@@ -113,16 +114,14 @@ class ServerTests(unittest.TestCase):
             self.assertIn(f'data-testid="{token}"', html, token)
         self.assertIn("jev-1.13", html)
         self.assertEqual(html, (Path(__file__).parent.parent / "prototypes" / "p-001-chat.html")
-                         .read_text(encoding="utf-8").replace("<b>jev-1.13</b>", '<b id="model-id">jev-1.13</b>'))
+                         .read_text(encoding="utf-8").replace("<b>jev-1.13</b>", '<b id="model-id">jev-1.13</b>')
+                         .replace(" — prototype</title>", "</title>"))
         js = self.get("/assets/shared.js")[2].decode("utf-8")
         self.assertIn('fetch("/api/config"', js)           # boot() asks the server for the rate
-        self.assertIn("PROTOTYPE · FIXTURES, NOT JEV", js)  # the prototype mark stays (Story 1.3 removes it)
         for token in ("badge-clicked", "speed-test-open"):
             self.assertIn(token, js + self.get("/assets/speed.js")[2].decode("utf-8"), token)
-        # the greeting and its three buttons are in the fixtures the page boots from
-        fx = json.loads(self.get("/assets/fixtures.json")[2])
-        self.assertTrue(fx["intents"]["greet"]["response"].startswith("สวัสดีค่ะ Beanly นะคะ"))
-        self.assertEqual(len(fx["intents"]["greet"]["buttons"]), 3)
+        # the greeting comes from the server (tests/test_static.py), not a fixture file
+        self.assertEqual(self.get("/assets/fixtures.json")[0], 404)
 
     def test_api_config(self):
         status, ctype, body = self.get("/api/config")
