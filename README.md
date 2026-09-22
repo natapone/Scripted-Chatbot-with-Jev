@@ -30,6 +30,7 @@ python3.11 -m app           # one warm-up call to Jev, then: ready · warm-up 20
 Open `http://127.0.0.1:8765/`. The server binds to 127.0.0.1 only; the key stays in the server
 process and never reaches the browser. It refuses to start, with one plain line, when the key or
 the rate is missing. `PORT=8766 python3.11 -m app` starts a second, throwaway instance.
+`JEV_HOST=127.0.0.1:1 python3.11 -m app` rehearses "Jev unreachable" (`ready · warm-up 0 · …`) — for the agent's rehearsal only, never the owner's walk.
 
 Tests (no network, no Jev): `python3.11 -m unittest discover -s tests -t . -v`
 

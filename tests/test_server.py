@@ -230,7 +230,7 @@ class WarmUpTests(unittest.TestCase):
             return httpd
         out = io.StringIO()
         with unittest.mock.patch.object(server, "make_server", make_and_stop), \
-                unittest.mock.patch.object(jev, "warm_up", lambda key: 200), \
+                unittest.mock.patch.object(jev, "warm_up", lambda key, **kw: 200), \
                 contextlib.redirect_stdout(out):
             code = main(environ={**GOOD, "PORT": "8799"}, env_path=NO_ENV_FILE)
         self.assertEqual(code, 0)
@@ -238,7 +238,7 @@ class WarmUpTests(unittest.TestCase):
         # a busy port is a plain refusal before any warm-up call is made
         calls = []
         err = io.StringIO()
-        with socket.socket() as busy, unittest.mock.patch.object(jev, "warm_up", lambda key: calls.append(key) or 200), \
+        with socket.socket() as busy, unittest.mock.patch.object(jev, "warm_up", lambda key, **kw: calls.append(key) or 200), \
                 contextlib.redirect_stderr(err):
             busy.bind(("127.0.0.1", 0)); busy.listen(1)
             code = main(environ={**GOOD, "PORT": str(busy.getsockname()[1])}, env_path=NO_ENV_FILE)

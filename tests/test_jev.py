@@ -2,14 +2,19 @@
 opens a loopback connection to a dead port (127.0.0.1:1) and nothing else touches a socket."""
 from __future__ import annotations
 
+import contextlib
 import dataclasses
+import io
 import json
 import re
 import time
 import unittest
+import unittest.mock
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
-from app import flow, jev
+from app import config, flow, jev, server
+from app.__main__ import main
 
 FAKE_KEY = "sk-or-v1-test-key-never-real"
 STAMP = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$")
@@ -172,6 +177,61 @@ class DeadAddressTests(unittest.TestCase):
         self.assertEqual((conn.sent[0]["host"], conn.sent[0]["port"], conn.sent[0]["timeout"]), ("example.test", 8443, 3))
         jev.post(FAKE_KEY, {}, conn)
         self.assertEqual((conn.sent[1]["host"], conn.sent[1]["port"], conn.sent[1]["timeout"]), ("openrouter.ai", None, 10))
+
+
+class ConfigSwitchTests(unittest.TestCase):
+    """JEV_HOST / JEV_TIMEOUT — rehearsal only. Absent, nothing differs from Story 1.1."""
+
+    GOOD = {"OPENROUTER_API_KEY": FAKE_KEY, "THB_PER_USD": "34.9", "RATE_DATE": "2026-09-22"}
+    NO_ENV_FILE = Path("/nonexistent/.env")
+
+    def load(self, environ):
+        return config.load(env_path=self.NO_ENV_FILE, environ=environ)
+
+    def test_switch_is_optional_and_reaches_the_warm_up(self):  # AC-5
+        cfg = self.load(self.GOOD)
+        self.assertEqual((cfg.jev_host, cfg.jev_timeout), ("openrouter.ai", 10.0))
+        self.assertEqual((jev.HOST, jev.TIMEOUT), ("openrouter.ai", 10))
+        cfg = self.load({**self.GOOD, "JEV_HOST": "127.0.0.1:1", "JEV_TIMEOUT": "2"})
+        self.assertEqual((cfg.jev_host, cfg.jev_timeout), ("127.0.0.1:1", 2.0))
+        self.assertNotIn(FAKE_KEY, repr(cfg))
+        for bad in ("x", "0", "-1"):
+            with self.assertRaises(config.ConfigError) as cm:
+                self.load({**self.GOOD, "JEV_TIMEOUT": bad})
+            self.assertIn("JEV_TIMEOUT", str(cm.exception))
+            self.assertNotIn(FAKE_KEY, str(cm.exception))
+        # the entry point hands the Config's host to the warm-up: a dead port is `warm-up 0`, fast,
+        # and the ready line still prints — the server is up (serve_forever cut short at once)
+        real_make = server.make_server
+
+        def make_and_stop(cfg, port=None):
+            httpd = real_make(cfg, port=0)
+            httpd.serve_forever = lambda: (_ for _ in ()).throw(KeyboardInterrupt())
+            return httpd
+        seen = []
+
+        def spy(key, connection=None, **kw):
+            seen.append(kw)
+            return 0
+        out = io.StringIO()
+        with unittest.mock.patch.object(server, "make_server", make_and_stop), \
+                unittest.mock.patch.object(jev, "warm_up", spy), contextlib.redirect_stdout(out):
+            code = main(environ={**self.GOOD, "PORT": "8768", "JEV_HOST": "127.0.0.1:1"}, env_path=self.NO_ENV_FILE)
+        self.assertEqual(code, 0)
+        self.assertEqual(seen, [{"host": "127.0.0.1:1", "timeout": 10.0}])
+        self.assertEqual(out.getvalue().strip(), "ready · warm-up 0 · http://127.0.0.1:8768")
+        seen.clear()
+        with unittest.mock.patch.object(server, "make_server", make_and_stop), \
+                unittest.mock.patch.object(jev, "warm_up", spy), contextlib.redirect_stdout(io.StringIO()):
+            main(environ={**self.GOOD, "PORT": "8768"}, env_path=self.NO_ENV_FILE)
+        self.assertEqual(seen, [{"host": "openrouter.ai", "timeout": 10.0}])   # without the variable: 1.1's call
+        # the real warm-up against the dead port: status 0, printed the same way, under a second
+        t0 = time.perf_counter()
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            self.assertEqual(jev.warm_up(FAKE_KEY, host="127.0.0.1:1", timeout=2), 0)
+        self.assertLess(time.perf_counter() - t0, 1.0)
+        self.assertEqual(out.getvalue(), "warm-up 0\n")
 
 
 if __name__ == "__main__":

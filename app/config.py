@@ -15,6 +15,8 @@ ENV_FILE = ROOT / ".env"
 HOST = "127.0.0.1"            # NFR2: reachable from this machine only — not configurable
 MODEL = "typesafe/jev-1.13"
 DEFAULT_PORT = 8765
+JEV_HOST = "openrouter.ai"    # JEV_HOST / JEV_TIMEOUT: rehearsal only (Story 1.6, E-002) — the
+JEV_TIMEOUT = 10.0            # owner's walk never sets them; absent, nothing differs
 
 
 class ConfigError(Exception):
@@ -29,6 +31,8 @@ class Config:
     port: int = DEFAULT_PORT
     host: str = HOST
     model: str = MODEL
+    jev_host: str = JEV_HOST          # `host[:port]` the client connects to, always over HTTPS
+    jev_timeout: float = JEV_TIMEOUT  # seconds per call
 
 
 def read_env_file(path: Path) -> dict[str, str]:
@@ -73,4 +77,14 @@ def load(env_path: Path | None = None, environ: dict | None = None) -> Config:
     except ValueError:
         raise ConfigError(f"PORT is not a number: {port_raw!r}") from None
 
-    return Config(key=key, thb_per_usd=thb_per_usd, rate_date=rate_date, port=port)
+    jev_host = values.get("JEV_HOST", "").strip() or JEV_HOST
+    timeout_raw = values.get("JEV_TIMEOUT", "").strip() or str(JEV_TIMEOUT)
+    try:
+        jev_timeout = float(timeout_raw)
+    except ValueError:
+        raise ConfigError(f"JEV_TIMEOUT is not a number: {timeout_raw!r}") from None
+    if jev_timeout <= 0:
+        raise ConfigError(f"JEV_TIMEOUT must be positive, got {timeout_raw!r}")
+
+    return Config(key=key, thb_per_usd=thb_per_usd, rate_date=rate_date, port=port,
+                  jev_host=jev_host, jev_timeout=jev_timeout)
