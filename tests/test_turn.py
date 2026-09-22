@@ -1,5 +1,6 @@
-"""Story 1.3 — the turn loop. Hermetic: Jev is a scripted connection behind the real `Client`
-(no socket), the clock is fixed, snapshots go to a temp dir."""
+"""Story 1.3 — the turn loop; Story 1.4 — the order form and the responses (`LeadTests`,
+`OrderTests`). Hermetic: Jev is a scripted connection behind the real `Client` (no socket), the
+clock is fixed, snapshots go to a temp dir."""
 from __future__ import annotations
 
 import json
@@ -8,7 +9,7 @@ import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from app import flow, jev, session, turn
+from app import flow, jev, order, session, turn
 from tests.test_jev import FAKE_KEY, scripted
 
 T0 = datetime(2026, 9, 22, 6, 48, 10, 0, tzinfo=timezone.utc)
@@ -407,8 +408,9 @@ class RunTurnTests(unittest.TestCase):
         self.assertEqual(r2.state().pending_prompt, {"slot": "brew", "context": "ask_brew", "params": {}, "message_id": "m3"})
         self.assertEqual(r2.state().contexts, {"ask_brew": {"expires_after_turn": 3, "params": {}}})
         res = r2.click({"label": "ดริป pour-over เฟรนช์เพรส โมก้าพอต หรือกาแฟดำแบบ filter", "intent": "inform", "params": {"brew": "filter"}, "message_id": "m3"}, "c2")
-        self.assertEqual((res["outcome"], res["log_entry"]["applied"]), ("matched", [{"set": "brew", "to": "filter"}]))
-        self.assertEqual(r2.state().order["recommend"], {"brew": None, "roast": None})   # written by Story 1.4, not here
+        self.assertEqual((res["outcome"], res["log_entry"]["applied"]), ("matched", [{"set": "recommend.brew", "to": "filter"}]))
+        self.assertEqual(r2.state().order["recommend"], {"brew": "filter", "roast": None})   # Story 1.4 writes it; the roast is asked next
+        self.assertEqual(res["bot"][0]["text"], "ชอบคั่วระดับไหนคะ?")
         # bad requests
         for kw in ({"text": ""}, {"text": "x", "button": {}}, {}):
             with self.assertRaises(turn.TurnError) as cm:
@@ -436,7 +438,7 @@ class RunTurnTests(unittest.TestCase):
         res = r.typed("ค่าส่งเท่าไหร่คะ", "t3")
         s = r.state()
         self.assertEqual((res["outcome"], res["turn_no"], len(res["bot"])), ("matched", 3, 2))
-        self.assertEqual((res["bot"][0]["response_id"], res["bot"][0]["text"]), ("faq.shipping_fee", "{FAQ-01.answer}"))
+        self.assertEqual((res["bot"][0]["response_id"], res["bot"][0]["text"]), ("faq.shipping_fee", "ค่าส่ง 100 บาททั่วประเทศ ส่งฟรีเมื่อสั่งครบ 5 ถุงขึ้นไป จัดส่ง 2-3 วันทำการ"))   # Story 1.4: the CSV answer
         self.assertEqual((res["bot"][1]["response_id"], res["bot"][1]["text"]), ("resume:quantity", "รับกี่ถุงดีคะ?"))
         self.assertEqual(labels(res["bot"][1]["buttons"]), ["1 ถุง", "2 ถุง"])
         self.assertNotEqual(res["bot"][1]["id"], asked_id)
@@ -449,7 +451,8 @@ class RunTurnTests(unittest.TestCase):
         self.assertEqual(res["raw"]["request"]["state"]["awaiting"], "quantity")
         # turn 4: another; the context is re-armed to 6 (the traced table), and grinding keeps its SOP line
         res = r.typed("บดให้ได้ไหมคะ", "t4")
-        self.assertEqual(res["bot"][0]["text"], "กาแฟดีต้องคู่ grind ที่ตรงเสมอค่ะ")
+        self.assertTrue(res["bot"][0]["text"].endswith(" กาแฟดีต้องคู่ grind ที่ตรงเสมอค่ะ"))   # Story 1.4: FAQ-06's answer + the SOP line
+        self.assertTrue(res["bot"][0]["text"].startswith("มีค่ะ"))
         self.assertEqual(r.state().contexts["ask_quantity"]["expires_after_turn"], 6)
         self.assertEqual(r.state().turn_no, 4)
         # start_over: the old snapshot is deleted, a new id issued, the greeting returned
@@ -507,6 +510,133 @@ class RunTurnTests(unittest.TestCase):
         blob = json.dumps([s.to_snapshot(), res, s.raw], ensure_ascii=False, default=str)
         self.assertNotIn(FAKE_KEY, blob)
         self.assertNotIn(FAKE_KEY, r.snapshot().__repr__())
+
+
+
+class LeadTests(unittest.TestCase):
+    """Story 1.4 task 02 — `lead()` asks for the first empty slot in the SOP's order."""
+
+    def test_lead_from_an_empty_form_to_the_read_back(self):  # conversation-flow § The order form
+        r = Rig(self)
+        s = r.s
+        # an empty form: the lead recommends — brew first, then roast, then the pair from the table
+        turn.lead(s, FLOW, 1)
+        self.assertEqual(s.transcript[-1]["text"], "เยี่ยมเลยค่ะ — งั้นรบกวนถามต่ออีกนิดน้า จะได้ recommend ตรงค่ะ ปกติชงแบบไหนคะ?")
+        self.assertEqual([b["params"] for b in s.transcript[-1]["buttons"]], [{"brew": "espresso_milk"}, {"brew": "filter"}, {"brew": "cold_brew"}])
+        self.assertEqual((s.pending_prompt["slot"], s.pending_prompt["context"], list(s.contexts)), ("brew", "ask_brew", ["ask_brew"]))
+        s.order["recommend"]["brew"] = "filter"
+        turn.lead(s, FLOW, 2)
+        self.assertEqual(s.transcript[-1]["text"], "ชอบคั่วระดับไหนคะ?")
+        self.assertEqual([b["params"]["roast"] for b in s.transcript[-1]["buttons"]], ["light", "medium", "dark", "decaf"])
+        self.assertEqual(s.pending_prompt["slot"], "roast")
+        s.order["recommend"]["roast"] = "light"
+        turn.lead(s, FLOW, 3)
+        pair = s.transcript[-1]
+        self.assertEqual(pair["text"], "story bean ก่อนนะคะ — ตัวแรก เกอิชา: คั่วอ่อน · ดอกไม้ มะลิ พีช · บอดี้เบา อีกตัว วอชด์ อาราบิก้า: คั่วอ่อน · ส้ม มะนาว ชาเขียว · สะอาด สดชื่น สนใจตัวไหนคะ?")
+        self.assertEqual(pair["buttons"], [{"label": "เกอิชา", "intent": "select_option", "params": {"product": "DH-001"}},
+                                           {"label": "วอชด์ อาราบิก้า", "intent": "select_option", "params": {"product": "MM-001"}},
+                                           {"label": "ดูตัวอื่น", "intent": "browse_catalog", "params": {}}])
+        self.assertEqual((s.options_shown, s.contexts["options_shown"]["params"], s.pending_prompt), (["DH-001", "MM-001"], {"skus": ["DH-001", "MM-001"]}, None))
+        self.assertEqual(s.order["recommend"], {"brew": None, "roast": None})           # cleared once given
+        # with `recommend=False` an empty form waits (ask_promotion, view_order)
+        n = len(s.transcript)
+        turn.lead(s, FLOW, 4, recommend=False)
+        self.assertEqual(len(s.transcript), n)
+        # a line with no quantity: the quantity question with its four buttons and the context's sku
+        s.order["lines"] = [{"sku": "DH-001", "qty": None, "added_by": "customer"}]
+        turn.lead(s, FLOW, 4)
+        q = s.transcript[-1]
+        self.assertEqual((q["text"], q["response_id"], q["variant"]), ("รับกี่ถุงดีคะ? สั่งครบ 5 ถุงส่งฟรีน้า", "ask_quantity", "plain"))
+        self.assertEqual(q["buttons"], [{"label": f"{n} ถุง", "intent": "inform", "params": {"quantity": str(n)}} for n in (1, 2, 3, 5)])
+        self.assertEqual(s.contexts["ask_quantity"], {"expires_after_turn": 6, "params": {"sku": "DH-001"}})
+        self.assertEqual(s.pending_prompt, {"slot": "quantity", "context": "ask_quantity", "params": {"sku": "DH-001"}, "message_id": q["id"]})
+        self.assertEqual(s.last_bot_message["id"], q["id"])
+        self.assertEqual(s.live_buttons[0]["message_id"], q["id"])
+        # quantity filled: the one promotion that fits, offered once, with exactly its effect
+        s.order["lines"][0]["qty"] = 1
+        turn.lead(s, FLOW, 5)
+        pr = s.transcript[-1]
+        self.assertEqual(pr["text"], "ซื้อเกอิชาคู่กับเนเชอรัล แอนแอโรบิก รับส่วนลด 80 บาท สำหรับคอกาแฟคั่วอ่อน สนใจไหมคะ? ไม่ urgent น้า ลองดูก่อนได้")
+        self.assertEqual(labels(pr["buttons"]), ["เพิ่มเนเชอรัล แอนแอโรบิก", "ไม่เป็นไร เอาเท่าเดิม"])
+        self.assertEqual([b["intent"] for b in pr["buttons"]], ["affirm", "deny"])
+        self.assertEqual(s.contexts["offer_promo"]["params"], {"promo_id": "PROMO-02", "effect": {"add_line": "DH-003"}})
+        self.assertEqual((s.promos_offered, s.pending_prompt["slot"], pr["response_id"]), (["PROMO-02"], "promotion", "promo.offer"))
+        # offered once: the next lead moves on to payment, with the fee
+        turn.lead(s, FLOW, 6)
+        pay = s.transcript[-1]
+        self.assertEqual(pay["text"], "ค่าส่ง 100 บาท ค่ะ ชำระแบบไหนสะดวกคะ? โอนผ่านบัญชีธนาคาร หรือเก็บเงินปลายทาง (มีค่าบริการเพิ่ม 30 บาท)")
+        self.assertEqual(pay["buttons"], [{"label": "โอนผ่านธนาคาร", "intent": "inform", "params": {"payment": "transfer"}},
+                                          {"label": "เก็บเงินปลายทาง", "intent": "inform", "params": {"payment": "cod"}}])
+        self.assertEqual((s.pending_prompt["slot"], s.pending_prompt["context"]), ("payment", "ask_payment"))
+        self.assertEqual(s.promos_offered, ["PROMO-02"])
+        s.order["lines"][0]["qty"] = 5                                               # five bags: the fee reads ฟรี
+        turn.lead(s, FLOW, 6)
+        self.assertTrue(s.transcript[-1]["text"].startswith("ค่าส่ง ฟรี ค่ะ"))
+        s.order["lines"][0]["qty"] = 1
+        # payment set: the delivery question with the sample button
+        s.order["payment"] = "cod"
+        turn.lead(s, FLOW, 7)
+        d = s.transcript[-1]
+        self.assertEqual(d["text"], "รบกวนขอชื่อ ที่อยู่ และเบอร์โทรสำหรับจัดส่งค่ะ — เดโมนี้ไม่ส่งของจริง ใช้ข้อมูลสมมติได้เลยน้า")
+        self.assertEqual(d["buttons"], [{"label": "ใช้ข้อมูลตัวอย่าง", "intent": "give_delivery_details", "params": {"sample": True}}])
+        self.assertEqual((s.pending_prompt["slot"], list(s.contexts)[-1]), ("delivery", "ask_delivery"))
+        # delivery set: the read-back as data, the hash in the context, the address masked for Jev
+        s.order["delivery_text"] = ADDRESS
+        turn.lead(s, FLOW, 8)
+        rb = s.transcript[-1]
+        self.assertEqual((rb["variant"], rb["response_id"], labels(rb["buttons"])), ("read-back", "confirm", ["ยืนยัน", "ขอแก้ไข"]))
+        self.assertEqual([b["intent"] for b in rb["buttons"]], ["affirm", "deny"])
+        self.assertEqual(rb["readback"]["rows"], [["เกอิชา × 1 ถุง", "980 บาท"], ["ค่าส่ง", "100 บาท"], ["ค่าบริการเก็บเงินปลายทาง", "30 บาท"], ["รวม", "1,110 บาท"]])
+        self.assertEqual((rb["readback"]["total"], rb["readback"]["delivery_text"], rb["readback"]["lead"]), (1110, ADDRESS, "สรุปออเดอร์ค่ะ"))
+        self.assertTrue(rb["text"].startswith("สรุปออเดอร์ค่ะ\nเกอิชา × 1 ถุง — 980 บาท"))
+        self.assertIn(ADDRESS, rb["text"])
+        self.assertIn("รบกวนคุณพี่ตรวจรายการอีกครั้ง แล้วยืนยันให้แอดน้า 🙏🏻", rb["text"])
+        self.assertNotIn(ADDRESS, s.last_bot_message["text_for_jev"])
+        self.assertIn(turn.MASK_FOR_JEV, s.last_bot_message["text_for_jev"])
+        h = s.contexts["confirm_order"]["params"]["order_hash"]
+        self.assertEqual(h, order.order_hash(s.order))
+        self.assertEqual(s.pending_prompt, {"slot": "confirmation", "context": "confirm_order", "params": {"order_hash": h}, "message_id": rb["id"]})
+        # a confirmed order is terminal: the lead asks nothing
+        s.order["order_code"] = "BEAN-2609-0009"
+        n = len(s.transcript)
+        turn.lead(s, FLOW, 9)
+        self.assertEqual(len(s.transcript), n)
+        # the snapshot carries the read-back's data and round-trips
+        r.store.commit(s)
+        snap = r.snapshot()
+        self.assertEqual(snap["transcript"][-1]["readback"]["total"], 1110)
+        self.assertNotIn("readback", snap["transcript"][0])                            # only a read-back bubble has it
+
+    def test_resume_after_a_faq_re_asks_with_the_grid(self):  # contract § Traced turn 3; walk § 3.2
+        r = Rig(self, (200, reply("faq.shipping_fee", 0.97)), (200, reply("faq.payment_methods", 0.9)))
+        s = r.s
+        s.order["lines"] = [{"sku": "DH-001", "qty": 1, "added_by": "customer"}]
+        s.order["payment"], s.order["delivery_text"] = "cod", ADDRESS
+        s.promos_offered = ["PROMO-02"]                                                 # declined earlier
+        turn.lead(s, FLOW, 1)                                                          # the read-back is pending
+        s.turn_no, s.last_turn_id = 1, "t0"
+        r.store.commit(s)
+        rb_id = s.last_bot_message["id"]
+        res = r.typed("ค่าส่งเท่าไหร่คะ", "t1")
+        self.assertEqual((res["outcome"], len(res["bot"])), ("matched", 2))
+        self.assertEqual((res["bot"][0]["response_id"], res["bot"][0]["buttons"]), ("faq.shipping_fee", []))
+        again = res["bot"][1]
+        self.assertEqual((again["response_id"], again["variant"], labels(again["buttons"])), ("resume:confirmation", "read-back", ["ยืนยัน", "ขอแก้ไข"]))
+        self.assertEqual(again["readback"]["total"], 1110)
+        self.assertNotEqual(again["id"], rb_id)
+        s = r.state()
+        self.assertEqual(s.contexts["confirm_order"]["expires_after_turn"], 4)         # re-armed: 2 + lifespan 2
+        self.assertEqual(s.pending_prompt["message_id"], again["id"])
+        self.assertEqual(s.order["lines"][0]["qty"], 1)                                 # a FAQ writes nothing
+        self.assertEqual(res["log_entry"]["applied"], [])
+        self.assertNotIn(ADDRESS, json.dumps(res["raw"]["request"], ensure_ascii=False))   # shop_said is masked
+        self.assertEqual(res["raw"]["request"]["state"]["awaiting"], "confirmation")
+        # a FAQ with nothing pending answers and waits
+        s.pending_prompt = None
+        r.store.commit(s)
+        res = r.typed("จ่ายยังไงได้บ้าง", "t2")
+        self.assertEqual(len(res["bot"]), 1)
+        self.assertTrue(res["bot"][0]["text"].startswith("รับชำระ 2 แบบ"))
 
 
 say = turn.say
