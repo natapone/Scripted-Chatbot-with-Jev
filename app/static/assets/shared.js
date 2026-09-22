@@ -137,7 +137,8 @@ function updateKeyInfo() {
   const s = S.session; const answered = (s?.log || []).filter((e) => e.jev && e.outcome !== "model_failed" && e.outcome !== "cap_reached");
   const avg = answered.length ? answered.reduce((a, e) => a + (e.jev.ms || 0), 0) / answered.length : null;
   const usd = answered.reduce((a, e) => a + (e.jev.cost_usd || 0), 0);
-  set("#avg-ms", avg == null ? "—" : fmt.ms10(avg), avg ?? 0); set("#total-baht", fmt.baht(usd, 3), usd); set("#total-turns", String(s?.turn_no ?? 0), s?.turn_no ?? 0);
+  const turns = s?.log?.length ?? 0;   // every committed message — typed, clicked or missed — as the rows are numbered
+  set("#avg-ms", avg == null ? "—" : fmt.ms10(avg), avg ?? 0); set("#total-baht", fmt.baht(usd, 3), usd); set("#total-turns", String(turns), turns);
   $("#key-info").setAttribute("data-total-usd", usd.toFixed(6));
 }
 function set(sel, text, value) { const n = $(sel); if (!n) return; n.textContent = text; n.setAttribute("data-value", value); n.classList.remove("bump"); void n.offsetWidth; n.classList.add("bump"); }

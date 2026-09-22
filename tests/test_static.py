@@ -61,6 +61,16 @@ class StaticTests(unittest.TestCase):
         self.assertNotIn("order:", js)
         self.assertNotIn("PROTO_FORCE_FAIL", js)
         self.assertNotIn(FAKE_KEY, js)
+        # a click is the same POST with the button and its message_id; a stale one is `ignored`
+        self.assertIn("button: btn", js)
+        self.assertIn("message_id: id", js)
+        self.assertIn('r.outcome === "ignored"', js)
+        # start over ends the session, then asks for a new one; a typed เริ่มใหม่ comes back `ended`
+        self.assertIn("if (r.ended)", js)
+        self.assertLess(js.index('fetch("/api/session/end"'), js.index('await load("")', js.index('fetch("/api/session/end"')))
+        # the composer is `judging` around every call and `ready` after, whatever happened
+        self.assertEqual(js.count('setComposer("judging")'), 3)      # send, click, startOver
+        self.assertEqual(js.count('finally { setComposer("ready"); }'), 3)
         if shutil.which("node"):                                     # syntax, when a node is at hand
             for name in ("shared.js", "speed.js"):
                 r = subprocess.run(["node", "--check", str(server.STATIC / "assets" / name)], capture_output=True, text=True)

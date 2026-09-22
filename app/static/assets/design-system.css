@@ -31,7 +31,7 @@ button { font: inherit; cursor: pointer; }
 .panel { background: var(--panel); color: var(--panel-ink); font-family: var(--font-en); font-size: var(--fs-panel); position: relative; }
 
 /* ---- chat header (lives in the top band) ---- */
-.chat-header { display: flex; align-items: center; gap: var(--gap); padding: 0 var(--pad); height: var(--band-top); font-weight: 700; }
+.chat-header { display: flex; align-items: center; gap: var(--gap); padding: 0 var(--pad); height: var(--band-top); font-weight: 700; width: var(--chat-w); box-sizing: border-box; }  /* Story 1.3b: over the chat column only — the panel header, pulled up into the band, covered its buttons */
 .chat-header .spacer { flex: 1; }
 .btn-quiet { background: none; border: 1px solid var(--line); border-radius: 999px; padding: 6px 14px; color: var(--ink-2); font-size: 15px; }
 .btn-quiet:hover { border-color: var(--ink-2); }
