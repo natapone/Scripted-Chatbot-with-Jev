@@ -17,6 +17,9 @@ MODEL = "typesafe/jev-1.13"
 DEFAULT_PORT = 8765
 JEV_HOST = "openrouter.ai"    # JEV_HOST / JEV_TIMEOUT: rehearsal only (Story 1.6, E-002) — the
 JEV_TIMEOUT = 10.0            # owner's walk never sets them; absent, nothing differs
+SESSION_TTL_S = 1800.0        # SESSION_TTL_S / SPEND_CAP_USD / VAR_DIR: rehearsal and tests only
+SPEND_CAP_USD = 0.50          # (Story 1.3) — the cap is this process's own spend, warm-ups included
+VAR_DIR = ROOT / "var"        # where `sessions/<id>.json` snapshots go; unpublished by .gitignore
 
 
 class ConfigError(Exception):
@@ -33,6 +36,20 @@ class Config:
     model: str = MODEL
     jev_host: str = JEV_HOST          # `host[:port]` the client connects to, always over HTTPS
     jev_timeout: float = JEV_TIMEOUT  # seconds per call
+    session_ttl_s: float = SESSION_TTL_S   # a session expires this long after its last customer message
+    spend_cap_usd: float = SPEND_CAP_USD   # after this much spent by this process, turns are `cap_reached`
+    var_dir: Path = VAR_DIR                # snapshots under `<var_dir>/sessions/`
+
+
+def _positive_float(values: dict, name: str, default: float) -> float:
+    raw = values.get(name, "").strip() or str(default)
+    try:
+        value = float(raw)
+    except ValueError:
+        raise ConfigError(f"{name} is not a number: {raw!r}") from None
+    if value <= 0:
+        raise ConfigError(f"{name} must be positive, got {raw!r}")
+    return value
 
 
 def read_env_file(path: Path) -> dict[str, str]:
@@ -86,5 +103,16 @@ def load(env_path: Path | None = None, environ: dict | None = None) -> Config:
     if jev_timeout <= 0:
         raise ConfigError(f"JEV_TIMEOUT must be positive, got {timeout_raw!r}")
 
+    session_ttl_s = _positive_float(values, "SESSION_TTL_S", SESSION_TTL_S)
+    cap_raw = values.get("SPEND_CAP_USD", "").strip() or str(SPEND_CAP_USD)
+    try:
+        spend_cap_usd = float(cap_raw)
+    except ValueError:
+        raise ConfigError(f"SPEND_CAP_USD is not a number: {cap_raw!r}") from None
+    if spend_cap_usd < 0:
+        raise ConfigError(f"SPEND_CAP_USD must not be negative, got {cap_raw!r}")
+    var_dir = Path(values.get("VAR_DIR", "").strip() or VAR_DIR)
+
     return Config(key=key, thb_per_usd=thb_per_usd, rate_date=rate_date, port=port,
-                  jev_host=jev_host, jev_timeout=jev_timeout)
+                  jev_host=jev_host, jev_timeout=jev_timeout, session_ttl_s=session_ttl_s,
+                  spend_cap_usd=spend_cap_usd, var_dir=var_dir)

@@ -4,6 +4,11 @@ Routes: `GET /` and `GET /assets/*` from `app/static/`; `GET /api/config` → th
 exchange rate and its date; `GET /api/health` → `{"ok": true}`; anything else 404. Nothing outside
 `app/static/` is ever read for a response, so `.env` cannot be served. The key is not on this
 module's path at all: the Config is held on the server object and only its public fields are sent.
+
+Story 1.3 adds the conversation: `GET /api/session?id=` (create or restore), `POST /api/turn`
+(one typed or clicked message, JSON body of at most 64 KB) and `POST /api/session/end`. The flow,
+the store and the Jev client hang on the server object; the handler only routes. The key lives
+inside the client's headers and is in no response.
 """
 from __future__ import annotations
 
@@ -12,13 +17,14 @@ import mimetypes
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import unquote, urlsplit
+from urllib.parse import parse_qs, unquote, urlsplit
 
 from app.config import HOST, Config
 
 STATIC = Path(__file__).resolve().parent / "static"
 TYPES = {".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8",
          ".js": "text/javascript; charset=utf-8", ".json": "application/json; charset=utf-8"}
+MAX_BODY = 64 * 1024
 
 
 def static_path(url_path: str) -> Path | None:
@@ -38,6 +44,18 @@ def static_path(url_path: str) -> Path | None:
     return target if target.is_file() else None
 
 
+def session_view(s, new: bool) -> dict:
+    """What `GET /api/session` returns: the transcript, what is clickable now, the log, the raw
+    bodies still in memory. `live_buttons` are the latest bot bubble's, with its `message_id` —
+    the ones a click will be honoured for."""
+    from app.turn import current_message_id
+    current = current_message_id(s)
+    bubble = next((b for b in s.transcript if b.get("who") == "bot" and b.get("id") == current), None)
+    live = [dict(b, message_id=current) for b in (bubble or {}).get("buttons", [])]
+    return {"session_id": s.session_id, "new": new, "turn_no": s.turn_no, "transcript": list(s.transcript),
+            "live_buttons": live, "log": list(s.log), "raw": dict(s.raw)}
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "jev-demo/0.1"
     sys_version = ""
@@ -47,12 +65,15 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         cfg: Config = self.server.cfg  # type: ignore[attr-defined]
-        path = urlsplit(self.path).path
+        url = urlsplit(self.path)
+        path = url.path
         if path == "/api/config":
             return self.send_json({"model": cfg.model, "thb_per_usd": cfg.thb_per_usd,
                                    "rate_date": cfg.rate_date})
         if path == "/api/health":
             return self.send_json({"ok": True})
+        if path == "/api/session":
+            return self.get_session(parse_qs(url.query).get("id", [""])[0])
         file = static_path(path)
         if file is None:
             return self.send_json({"error": "not found"}, HTTPStatus.NOT_FOUND)
@@ -65,6 +86,73 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def do_POST(self):
+        path = urlsplit(self.path).path
+        if path not in ("/api/turn", "/api/session/end"):
+            return self.send_json({"error": "not found"}, HTTPStatus.NOT_FOUND)
+        body = self.read_json()
+        if body is None:
+            return
+        if path == "/api/turn":
+            return self.post_turn(body)
+        return self.post_end(body)
+
+    # --- the conversation
+
+    def get_session(self, session_id: str):
+        from app import turn
+        store, flow = self.server.store, self.server.flow  # type: ignore[attr-defined]
+        s = store.get(session_id.strip()) if session_id else None
+        if s is None:
+            s = turn.new_session(store, flow)
+            return self.send_json(session_view(s, True))
+        with store.lock(s.session_id):
+            return self.send_json(session_view(s, False))
+
+    def post_turn(self, body: dict):
+        from app import turn
+        srv = self.server
+        cfg: Config = srv.cfg  # type: ignore[attr-defined]
+        session_id = body.get("session_id")
+        if not isinstance(session_id, str) or not session_id:
+            return self.send_json({"error": "session_id is missing"}, HTTPStatus.BAD_REQUEST)
+        try:
+            result = turn.run_turn(srv.store, srv.flow, srv.client, session_id, body.get("turn_id"),  # type: ignore[attr-defined]
+                                   text=body.get("text"), button=body.get("button"),
+                                   spend_cap_usd=cfg.spend_cap_usd)
+        except turn.TurnError as e:
+            return self.send_json({"error": e.message}, e.status)
+        return self.send_json(result)
+
+    def post_end(self, body: dict):
+        store = self.server.store  # type: ignore[attr-defined]
+        session_id = body.get("session_id")
+        if not isinstance(session_id, str) or not session_id:
+            return self.send_json({"error": "session_id is missing"}, HTTPStatus.BAD_REQUEST)
+        known = store.get(session_id) is not None
+        store.end(session_id)
+        return self.send_json({"ended": known, "session_id": session_id})
+
+    def read_json(self) -> dict | None:
+        """The body as a JSON object, or None after an error response was sent."""
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            length = -1
+        if length < 0 or length > MAX_BODY:
+            self.send_json({"error": f"body must be JSON of at most {MAX_BODY} bytes"},
+                           HTTPStatus.REQUEST_ENTITY_TOO_LARGE if length > MAX_BODY else HTTPStatus.BAD_REQUEST)
+            return None
+        raw = self.rfile.read(length) if length else b""
+        try:
+            data = json.loads(raw.decode("utf-8")) if raw else None
+        except (ValueError, UnicodeDecodeError):
+            data = None
+        if not isinstance(data, dict):
+            self.send_json({"error": "body must be a JSON object"}, HTTPStatus.BAD_REQUEST)
+            return None
+        return data
+
     def send_json(self, obj, status=HTTPStatus.OK):
         body = json.dumps(obj, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
@@ -75,9 +163,16 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
 
-def make_server(cfg: Config, port: int | None = None) -> ThreadingHTTPServer:
-    """Bind to 127.0.0.1 (never configurable) on cfg.port, or `port` (0 = ephemeral, for tests)."""
+def make_server(cfg: Config, port: int | None = None, *, flow=None, store=None, client=None) -> ThreadingHTTPServer:
+    """Bind to 127.0.0.1 (never configurable) on cfg.port, or `port` (0 = ephemeral, for tests).
+    The flow, the store and the client are built from the Config when not given — a test passes
+    its own store (a temp dir) and client (a fake connection)."""
+    from app import flow as flow_module, jev, session
     httpd = ThreadingHTTPServer((HOST, cfg.port if port is None else port), Handler)
     httpd.daemon_threads = True
     httpd.cfg = cfg  # type: ignore[attr-defined]
+    httpd.flow = flow if flow is not None else flow_module.load()  # type: ignore[attr-defined]
+    httpd.store = store if store is not None else session.Store(  # type: ignore[attr-defined]
+        session.flow_version_of(flow_module.CATALOGUE), cfg.var_dir, ttl_s=cfg.session_ttl_s)
+    httpd.client = client if client is not None else jev.Client(cfg.key, cfg.jev_host, cfg.jev_timeout)  # type: ignore[attr-defined]
     return httpd

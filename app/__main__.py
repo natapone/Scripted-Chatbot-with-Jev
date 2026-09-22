@@ -21,7 +21,8 @@ def main(environ: dict | None = None, env_path=None) -> int:
         print(f"refusing to start: cannot bind http://{cfg.host}:{cfg.port} — {e.strerror or e}. "
               f"Is another server on that port? Try PORT=<n>.", file=sys.stderr)
         return 2
-    status = jev.warm_up(cfg.key, host=cfg.jev_host, timeout=cfg.jev_timeout)
+    # the warm-up opens the kept-alive connection every turn will reuse (Story 1.3, F-3)
+    status = jev.warm_up(cfg.key, host=cfg.jev_host, timeout=cfg.jev_timeout, client=httpd.client)
     print(f"ready · warm-up {status} · http://{cfg.host}:{cfg.port}", flush=True)
     try:
         httpd.serve_forever()
@@ -29,6 +30,7 @@ def main(environ: dict | None = None, env_path=None) -> int:
         pass
     finally:
         httpd.server_close()
+        httpd.client.close()
     return 0
 
 

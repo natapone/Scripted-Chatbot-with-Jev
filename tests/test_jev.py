@@ -3,6 +3,7 @@ opens a loopback connection to a dead port (127.0.0.1:1) and nothing else touche
 from __future__ import annotations
 
 import contextlib
+import http.client
 import dataclasses
 import io
 import json
@@ -218,13 +219,18 @@ class ConfigSwitchTests(unittest.TestCase):
                 unittest.mock.patch.object(jev, "warm_up", spy), contextlib.redirect_stdout(out):
             code = main(environ={**self.GOOD, "PORT": "8768", "JEV_HOST": "127.0.0.1:1"}, env_path=self.NO_ENV_FILE)
         self.assertEqual(code, 0)
-        self.assertEqual(seen, [{"host": "127.0.0.1:1", "timeout": 10.0}])
+        # Story 1.3: the warm-up also goes through the server's kept-alive client, built on the same host
+        self.assertEqual(len(seen), 1)
+        self.assertEqual((seen[0]["host"], seen[0]["timeout"]), ("127.0.0.1:1", 10.0))
+        self.assertIsInstance(seen[0]["client"], jev.Client)
+        self.assertEqual((seen[0]["client"].host, seen[0]["client"].timeout), ("127.0.0.1:1", 10.0))
         self.assertEqual(out.getvalue().strip(), "ready · warm-up 0 · http://127.0.0.1:8768")
         seen.clear()
         with unittest.mock.patch.object(server, "make_server", make_and_stop), \
                 unittest.mock.patch.object(jev, "warm_up", spy), contextlib.redirect_stdout(io.StringIO()):
             main(environ={**self.GOOD, "PORT": "8768"}, env_path=self.NO_ENV_FILE)
-        self.assertEqual(seen, [{"host": "openrouter.ai", "timeout": 10.0}])   # without the variable: 1.1's call
+        self.assertEqual((seen[0]["host"], seen[0]["timeout"]), ("openrouter.ai", 10.0))   # without the variable: 1.1's call
+        self.assertEqual(seen[0]["client"].host, "openrouter.ai")
         # the real warm-up against the dead port: status 0, printed the same way, under a second
         t0 = time.perf_counter()
         out = io.StringIO()
@@ -232,6 +238,105 @@ class ConfigSwitchTests(unittest.TestCase):
             self.assertEqual(jev.warm_up(FAKE_KEY, host="127.0.0.1:1", timeout=2), 0)
         self.assertLess(time.perf_counter() - t0, 1.0)
         self.assertEqual(out.getvalue(), "warm-up 0\n")
+
+
+def scripted(*steps):
+    """A connection class for the kept-alive Client: each instantiation is one connection; each
+    request takes the next step — a (status, reply) pair, or an exception to raise. `opened`
+    counts connections, `sent` the bodies, in order."""
+    it = iter(steps)
+    log = {"opened": 0, "sent": [], "closed": 0}
+
+    class Conn:
+        def __init__(self, host, port=None, timeout=None):
+            log["opened"] += 1
+            self.host, self.port, self.timeout = host, port, timeout
+
+        def request(self, method, path, body=None, headers=None):
+            step = next(it)
+            log["sent"].append({"body": json.loads(body), "headers": dict(headers), "host": self.host,
+                                "port": self.port, "timeout": self.timeout})
+            if isinstance(step, BaseException):
+                raise step
+            self._step = step
+
+        def getresponse(self):
+            status, reply = self._step
+
+            class R:
+                pass
+            r = R()
+            r.status = status
+            r.read = lambda: json.dumps(reply).encode("utf-8") if reply is not None else b""
+            return r
+
+        def close(self):
+            log["closed"] += 1
+    Conn.log = log
+    return Conn
+
+
+class ClientTests(unittest.TestCase):
+    """Story 1.3 — the kept-alive connection (F-3)."""
+
+    def test_keeps_one_connection_and_counts(self):
+        body = {"model": "typesafe/jev-1.13", "state": {}, "questions": {}}
+        conn = scripted((200, GOOD_REPLY), (200, GOOD_REPLY), (200, {"id": "gen-2", "usage": {"cost": 0.0002}}))
+        c = jev.Client(FAKE_KEY, host="example.test:8443", timeout=7, connection=conn)
+        self.assertEqual((c.calls, c.spent_usd), (0, 0.0))
+        self.assertEqual(c.post(body), (200, GOOD_REPLY))
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(jev.warm_up(FAKE_KEY, client=c), 200)  # the warm-up rides the same connection
+        a = jev.ask(None, body, client=c, clock=ticking(T0, T0 + timedelta(milliseconds=12)))
+        self.assertEqual((a.status, a.error, a.ms, a.cost_usd, a.request_id), (200, "empty", 12, 0.0002, "gen-2"))
+        self.assertEqual(conn.log["opened"], 1)                       # three calls, one connection
+        self.assertEqual(conn.log["closed"], 0)
+        self.assertEqual(c.calls, 3)
+        self.assertAlmostEqual(c.spent_usd, 0.000164 * 2 + 0.0002)
+        self.assertEqual([s["body"] for s in conn.log["sent"]], [body, jev.WARM_UP_BODY, body])
+        s = conn.log["sent"][0]
+        self.assertEqual((s["host"], s["port"], s["timeout"]), ("example.test", 8443, 7))
+        self.assertEqual(s["headers"]["Authorization"], f"Bearer {FAKE_KEY}")
+        # the key is in the headers only: not in the repr, not in any public attribute
+        self.assertNotIn(FAKE_KEY, repr(c))
+        self.assertNotIn("Bearer", repr(c))
+        self.assertIn("calls=3", repr(c))
+        for name in ("host", "timeout", "spent_usd", "calls"):
+            self.assertNotIn(FAKE_KEY, str(getattr(c, name)))
+        c.close()
+        self.assertEqual(conn.log["closed"], 1)
+
+    def test_reconnects_after_a_failure(self):
+        body = {"model": "typesafe/jev-1.13", "state": {}, "questions": {}}
+        # a connection that dies after serving one call: the next call retries once on a new one
+        conn = scripted((200, GOOD_REPLY), http.client.RemoteDisconnected("gone"), (200, GOOD_REPLY),
+                        ConnectionRefusedError("no"), ConnectionRefusedError("no"), ConnectionRefusedError("no"),
+                        (200, GOOD_REPLY))
+        c = jev.Client(FAKE_KEY, connection=conn)
+        self.assertEqual(c.post(body)[0], 200)
+        self.assertEqual(c.post(body), (200, GOOD_REPLY))            # the retry, transparent: one call
+        self.assertEqual((conn.log["opened"], c.calls), (2, 2))
+        # a used connection that fails and whose retry fails too is status 0 (two attempts, one call) …
+        self.assertEqual(c.post(body), (0, {"error": "ConnectionRefusedError"}))
+        self.assertEqual((conn.log["opened"], c.calls), (3, 3))
+        self.assertIsNone(c._conn)
+        # … a fresh connection that fails is status 0 after one attempt (no retry); then it recovers
+        self.assertEqual(c.post(body), (0, {"error": "ConnectionRefusedError"}))
+        self.assertEqual((conn.log["opened"], c.calls), (4, 4))
+        self.assertEqual(c.post(body), (200, GOOD_REPLY))
+        self.assertEqual((conn.log["opened"], c.calls), (5, 5))
+        self.assertAlmostEqual(c.spent_usd, 0.000164 * 3)
+        # through ask(): status 0 and the class name, stamps set, never the key
+        conn2 = scripted(TimeoutError("slow"))
+        a = jev.ask(None, body, client=jev.Client(FAKE_KEY, connection=conn2), clock=ticking(T0, T0 + timedelta(seconds=10)))
+        self.assertEqual((a.status, a.error, a.intent, a.ms), (0, "TimeoutError", None, 10_000))
+        self.assertNotIn(FAKE_KEY, json.dumps(dataclasses.asdict(a), ensure_ascii=False, default=str))
+        # the real thing against a dead port: 0, fast, the connection dropped for the next attempt
+        t0 = time.perf_counter()
+        c = jev.Client(FAKE_KEY, host="127.0.0.1:1", timeout=2)
+        self.assertEqual(c.post(body), (0, {"error": "ConnectionRefusedError"}))
+        self.assertLess(time.perf_counter() - t0, 1.0)
+        self.assertIsNone(c._conn)
 
 
 if __name__ == "__main__":
