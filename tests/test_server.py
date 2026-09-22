@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import io
 import unittest
+import unittest.mock
 from pathlib import Path
 
 import http.client
@@ -12,7 +13,7 @@ import json
 import socket
 import threading
 
-from app import config, server
+from app import config, jev, server
 from app.__main__ import main
 
 FAKE_KEY = "sk-or-v1-test-key-never-real"
@@ -146,6 +147,76 @@ class ServerTests(unittest.TestCase):
         if not host.startswith("127."):
             with self.assertRaises(OSError):
                 socket.create_connection((host, self.port), timeout=1).close()
+
+
+class FakeConnection:
+    """Stands in for http.client.HTTPSConnection: records the request, returns a canned answer."""
+    sent = []
+    status = 200
+    reply = {"answers": {"confirm": {"type": "noul", "noul": 0.99}}, "usage": {"cost": 0.00016}}
+
+    def __init__(self, host, timeout=None):
+        self.host = host
+
+    def request(self, method, path, body=None, headers=None):
+        FakeConnection.sent.append((self.host, method, path, json.loads(body), dict(headers)))
+
+    def getresponse(self):
+        outer = self
+
+        class R:
+            status = outer.status
+
+            def read(self_):
+                return json.dumps(outer.reply).encode()
+        return R()
+
+    def close(self):
+        pass
+
+
+class WarmUpTests(unittest.TestCase):
+    def test_warm_up_stubbed(self):
+        FakeConnection.sent.clear()
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            status = jev.warm_up(FAKE_KEY, connection=FakeConnection)
+        self.assertEqual(status, 200)
+        self.assertEqual(out.getvalue(), "warm-up 200\n")
+        self.assertNotIn(FAKE_KEY, out.getvalue())  # NFR1: the key never in any output
+        # exactly one request, the spike's shape: one noul question to jev-1.13 on /api/v1/systemone
+        self.assertEqual(len(FakeConnection.sent), 1)
+        host, method, path, body, headers = FakeConnection.sent[0]
+        self.assertEqual((host, method, path), ("openrouter.ai", "POST", "/api/v1/systemone"))
+        self.assertEqual(body["model"], "typesafe/jev-1.13")
+        self.assertEqual(list(body["questions"]), ["confirm"])
+        self.assertEqual(body["questions"]["confirm"]["type"], "noul")
+        self.assertEqual(set(body["questions"]["confirm"]["criteria"]), {"true", "false"})
+        self.assertEqual(headers["Authorization"], f"Bearer {FAKE_KEY}")  # the key goes here only
+        self.assertNotIn(FAKE_KEY, json.dumps(body))
+        # a connection failure is a status of 0, printed the same way, and the key is not in it
+        class Down(FakeConnection):
+            def request(self, *a, **k):
+                raise ConnectionRefusedError("refused")
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            self.assertEqual(jev.warm_up(FAKE_KEY, connection=Down), 0)
+        self.assertEqual(out.getvalue(), "warm-up 0\n")
+        # and the entry point prints the ready line with that status and binds 127.0.0.1
+        # (serve_forever is cut short by making the server raise KeyboardInterrupt at once)
+        real_make = server.make_server
+
+        def make_and_stop(cfg, port=None):
+            httpd = real_make(cfg, port=0)
+            httpd.serve_forever = lambda: (_ for _ in ()).throw(KeyboardInterrupt())
+            return httpd
+        out = io.StringIO()
+        with unittest.mock.patch.object(server, "make_server", make_and_stop), \
+                unittest.mock.patch.object(jev, "warm_up", lambda key: 200), \
+                contextlib.redirect_stdout(out):
+            code = main(environ={**GOOD, "PORT": "8799"}, env_path=NO_ENV_FILE)
+        self.assertEqual(code, 0)
+        self.assertEqual(out.getvalue().strip(), "ready · warm-up 200 · http://127.0.0.1:8799")
 
 
 if __name__ == "__main__":
