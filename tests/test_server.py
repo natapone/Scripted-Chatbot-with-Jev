@@ -235,6 +235,17 @@ class WarmUpTests(unittest.TestCase):
             code = main(environ={**GOOD, "PORT": "8799"}, env_path=NO_ENV_FILE)
         self.assertEqual(code, 0)
         self.assertEqual(out.getvalue().strip(), "ready · warm-up 200 · http://127.0.0.1:8799")
+        # a busy port is a plain refusal before any warm-up call is made
+        calls = []
+        err = io.StringIO()
+        with socket.socket() as busy, unittest.mock.patch.object(jev, "warm_up", lambda key: calls.append(key) or 200), \
+                contextlib.redirect_stderr(err):
+            busy.bind(("127.0.0.1", 0)); busy.listen(1)
+            code = main(environ={**GOOD, "PORT": str(busy.getsockname()[1])}, env_path=NO_ENV_FILE)
+        self.assertEqual(code, 2)
+        self.assertEqual(calls, [])
+        self.assertIn("cannot bind http://127.0.0.1:", err.getvalue())
+        self.assertNotIn(FAKE_KEY, err.getvalue())
 
 
 if __name__ == "__main__":
