@@ -240,7 +240,7 @@ class N { constructor(tag){ this.tag=tag; this.kids=[]; this.attrs={}; this.styl
   append(...xs){ for (const x of xs) this.kids.push(typeof x==='string'? Object.assign(new N('#text'),{own:x}) : x); }
   replaceChildren(...xs){ this.kids=[]; this.append(...xs); } prepend(x){ this.kids.unshift(x); } remove(){}
   addEventListener(){} querySelectorAll(){ return []; } querySelector(){ return null; } }
-const byId = {}; for (const id of ['viewer','viewer-title','viewer-sent','viewer-back','viewer-applied','viewer-raw-request','viewer-raw-response','key-info']) byId[id]=new N('div');
+const byId = {}; for (const id of ['viewer','viewer-title','viewer-sent','viewer-back','viewer-applied','viewer-raw-request','viewer-raw-response','key-info','key-status','model-status','avg-ms','total-baht','total-turns']) byId[id]=new N('div');
 var document = { createElement: (t)=>new N(t), createTextNode: (t)=>Object.assign(new N('#text'),{own:t}),
   querySelector: (sel)=> sel.startsWith('#') ? byId[sel.slice(1)] ?? null : null, querySelectorAll: ()=>[] };
 var Node = N; var setTimeout = (f)=>f();
@@ -288,6 +288,31 @@ var Node = N; var setTimeout = (f)=>f();
         self.assertIn("t_sent → t_received|06:48:10.418 → 06:48:10.756 = 338 ms", after["viewer-back"])
         js = self.get("/assets/shared.js")[1]
         self.assertIn('if (ev.key === "Escape") closeViewer()', js)                  # Escape closes
+
+    def test_badge_and_status_line_follow_the_last_typed_turn(self):  # AC-4; walk hazard
+        html = self.get("/")[1]
+        self.assertIn('data-testid="model-status" id="model-status" data-status="live"', html)
+        ok = lambda n, cost=0.000164: {"turn_id": f"t{n}", "outcome": "matched", "input": {"text": "x"}, "jev": {"status": 200, "ms": 300 + n, "cost_usd": cost}}
+        down = {"turn_id": "tf", "outcome": "model_failed", "input": {"text": "x"}, "jev": {"status": 0, "error": "ConnectionRefusedError", "ms": 0, "cost_usd": 0}}
+        cap = {"turn_id": "tc", "outcome": "cap_reached", "input": {"text": "x"}, "jev": {"status": 0, "error": "cap", "ms": 0, "cost_usd": 0.0}}
+        clicked = {"turn_id": "tk", "outcome": "matched", "input": {"kind": "clicked", "text": "1 ถุง"}}
+        steps = [[ok(1)], [ok(1), down], [ok(1), down, clicked], [ok(1), down, clicked, ok(2)], [ok(1), cap], []]
+        script = self.FAKE_DOM + (
+            "CFG.rate.thb_per_usd = 34.9; const out = [];"
+            f"for (const log of {json.dumps(steps)}) {{ S.session = {{ id: 's', log, raw: {{}} }}; updateKeyInfo();"
+            " const b = document.querySelector('#model-status');"
+            " out.push([b.textContent, b.className, b.getAttribute('data-status'), document.querySelector('#key-status').textContent,"
+            " document.querySelector('#total-baht').getAttribute('data-value'), document.querySelector('#avg-ms').textContent]); }"
+            "console.log(JSON.stringify(out));")
+        out = self.node(script)
+        self.assertEqual(out[0][:4], ["live", "badge live", "live", ""])
+        self.assertEqual(out[1][:4], ["down", "badge down", "down", "● unreachable · ConnectionRefusedError"])
+        self.assertEqual((out[1][4], out[1][5]), ("0.000164", "300 ms"))             # the failed turn is not counted
+        self.assertEqual(out[2][:4], out[1][:4])                                     # a click makes no call: still down
+        self.assertEqual(out[3][:4], ["live", "badge live", "live", ""])             # the next answered call: live, line gone
+        self.assertEqual(out[4][:4], ["cap", "badge cap", "cap", "● spend cap reached"])
+        self.assertEqual(out[5][:4], ["live", "badge live", "live", ""])             # start over / a fresh page
+        self.assertIn(".badge.cap::before", self.get("/assets/design-system.css")[1])
 
     def test_speed_test_mounted_but_not_wired(self):
         status, js = self.get("/assets/speed.js")

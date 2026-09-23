@@ -100,14 +100,22 @@ function renderTurn(r, turn_id, wrap = null) {
   if (r.you) { if (r.you.kind === "clicked") pressed(wrap, r.you.text); you(r.you); }
   r.bot.forEach(bot);
   if (r.log_entry) { s.log.push(r.log_entry); if (r.raw) s.raw[turn_id] = r.raw; if (r.log_entry.jev) addTurnRow(r.log_entry, s.log.length); }
-  status(r);
   updateKeyInfo();
 }
-function status(r) {
-  const st = $("#key-status"); if (!st) return;
-  if (r.outcome === "model_failed") st.textContent = `● unreachable · ${r.log_entry?.jev?.error || "no answer"}`;
-  else if (r.outcome === "cap_reached") st.textContent = "● spend cap reached";
-  else if (r.model_status === "live" && r.log_entry?.jev) st.textContent = "";   // the model answered a call — cleared (a click makes none)
+/* The model's status (05_components § KeyInfo, `status: live|down|cap`) is the last typed turn's:
+   a failed call → `down` and *● unreachable · <error>* above the figures; the cap → `cap` and
+   *● spend cap reached*; an answered call → `live`, the line gone. A click makes no call and changes
+   nothing. Read from the log, so a reload restores it as the last logged turn left it. */
+function modelStatus(log) {
+  const e = [...(log || [])].reverse().find((x) => x.jev);
+  if (e?.outcome === "model_failed") return { status: "down", line: `● unreachable · ${e.jev.error || "no answer"}` };
+  if (e?.outcome === "cap_reached") return { status: "cap", line: "● spend cap reached" };
+  return { status: "live", line: "" };
+}
+function showStatus(log) {
+  const m = modelStatus(log); const b = $("#model-status"); const st = $("#key-status");
+  if (b) { b.className = `badge ${m.status}`; b.textContent = m.status; b.setAttribute("data-status", m.status); }
+  if (st) st.textContent = m.line;
 }
 /* The server itself could not be reached, or the session it was asked about is gone: an unknown
    or expired id is "a new session, as if the page had just opened" (session-state.md). */
@@ -171,6 +179,7 @@ function updateKeyInfo() {
   const turns = s?.log?.length ?? 0;   // every committed message — typed, clicked or missed — as the rows are numbered
   set("#avg-ms", avg == null ? "—" : fmt.ms10(avg), avg ?? 0); set("#total-baht", fmt.baht(usd, 3), usd); set("#total-turns", String(turns), turns);
   $("#key-info").setAttribute("data-total-usd", usd.toFixed(6));
+  showStatus(s?.log);
   fitViewer();
 }
 function set(sel, text, value) { const n = $(sel); if (!n) return; n.textContent = text; n.setAttribute("data-value", value); n.classList.remove("bump"); void n.offsetWidth; n.classList.add("bump"); }

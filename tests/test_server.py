@@ -113,9 +113,18 @@ class ServerTests(unittest.TestCase):
                       "band-bottom"):
             self.assertIn(f'data-testid="{token}"', html, token)
         self.assertIn("jev-1.13", html)
+        # Story 1.5 adds exactly its named hooks: data-status, rate-date, data-total-usd, the raw <details>
+        applied = '<h4>What the bot did</h4><div id="viewer-applied" data-testid="viewer-applied"></div>\n'
         self.assertEqual(html, (Path(__file__).parent.parent / "prototypes" / "p-001-chat.html")
                          .read_text(encoding="utf-8").replace("<b>jev-1.13</b>", '<b id="model-id">jev-1.13</b>')
-                         .replace(" — prototype</title>", "</title>"))
+                         .replace(" — prototype</title>", "</title>")
+                         .replace('id="model-status">live</span> · <span id="rate" data-testid="rate"></span>',
+                                  'id="model-status" data-status="live">live</span> · <span id="rate" data-testid="rate"></span>'
+                                  ' · <span id="rate-date" data-testid="rate-date"></span>')
+                         .replace('data-testid="key-info">', 'data-testid="key-info" data-total-usd="0.000000">')
+                         .replace(applied, applied
+                                  + '        <details><summary>raw request</summary><pre id="viewer-raw-request" data-testid="viewer-raw-request"></pre></details>\n'
+                                  + '        <details><summary>raw response</summary><pre id="viewer-raw-response" data-testid="viewer-raw-response"></pre></details>\n'))
         js = self.get("/assets/shared.js")[2].decode("utf-8")
         self.assertIn('fetch("/api/config"', js)           # boot() asks the server for the rate
         for token in ("badge-clicked", "speed-test-open"):
