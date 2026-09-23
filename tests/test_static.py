@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import http.client
 import json
+import re
 import shutil
 import subprocess
 import tempfile
@@ -313,6 +314,23 @@ var Node = N; var setTimeout = (f)=>f();
         self.assertEqual(out[4][:4], ["cap", "badge cap", "cap", "● spend cap reached"])
         self.assertEqual(out[5][:4], ["live", "badge live", "live", ""])             # start over / a fresh page
         self.assertIn(".badge.cap::before", self.get("/assets/design-system.css")[1])
+
+    def css_rule(self, css, selector):
+        m = re.search(r"(?m)^" + re.escape(selector) + r"\s*\{([^}]*)\}", css)
+        self.assertIsNotNone(m, selector)
+        return {k.strip(): v.strip() for k, _, v in (d.partition(":") for d in m.group(1).split(";")) if k.strip()}
+
+    def test_header_reads_and_its_button_is_not_covered(self):  # Story 2.3 AC-6: F-10, F-6
+        css = self.get("/assets/design-system.css")[1]
+        header = self.css_rule(css, ".panel-header")
+        # F-10: pulled up into the light top band, the header keeps the panel's dark ground under its panel ink
+        self.assertEqual(header["margin-top"], "calc(-1 * var(--band-top))")
+        self.assertEqual(header["background"], "var(--panel)")
+        self.assertEqual(self.css_rule(css, ".panel-header b")["color"], "var(--panel-ink)")
+        self.assertEqual(self.css_rule(css, ".panel")["background"], "var(--panel)")
+        # F-6: the chat header spans the chat column only, so the panel header never lies over เริ่มใหม่
+        self.assertEqual(self.css_rule(css, ".chat-header")["width"], "var(--chat-w)")
+        self.assertEqual(self.css_rule(css, ".cols")["grid-template-columns"], "var(--chat-w) 1fr")
 
     # Story 2.2 — DR-010: the speed test adds nothing to the page. The design's SpeedTest and
     # SpeedTestButton sections are superseded, so their tokens are diffed in reverse: none is served.
