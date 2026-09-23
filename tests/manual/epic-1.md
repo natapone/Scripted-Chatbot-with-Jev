@@ -125,6 +125,8 @@ reads `— · ฿0.000 · 0`, no panel rows.
 
 | # | Step | What happened | Class | Routed to |
 |---|---|---|---|---|
+| W-1 | off-runbook, after the greeting's **มีโปรอะไรบ้าง** click | Walker: *"values=roast light, FALLBACK · product_info; but bot still reply ขอโทษด้วยน้า แอดยังจับไม่ได้ว่าหมายถึงแบบไหน ลองพิมพ์อีกครั้งได้ไหมคะ?"* Typed **มีแบบคั่วอ่อนไม๊**. Log: `outcome fallback`, Jev `product_info` **0.41** (under the 0.45 threshold), `roast: light` read, `applied: []`, no pending prompt. The catalogue's `browse_catalog` has the example *มีเมล็ดคั่วเข้มตัวไหนบ้างคะ* (roast dark) and answers "only the matching products" | Walker's ruling: *"work as intented, it just need more intent to make chat more realistic"* — an improvement, not a defect. Same shape again: **มีแบบเปรี้ยวๆไม๊** → `ask_recommendation` 0.42 → fallback | *(at triage)* |
+| W-2 | § 1 — the brew question (after **มีอะไรแนะนำบ้าง**; walk 1.1's buttons) | Walker: *"you must not put multiple option in same bullet eg [เอสเปรโซ่ หรือ นม] just separate it clearly"*. The built buttons are the `brew` entity's descriptions for Jev, used as labels: **ชงเอสเปรสโซ่ หรือทำเมนูนม เช่น ลาเต้ คาปูชิโน่** · **ดริป pour-over เฟรนช์เพรส โมก้าพอต หรือกาแฟดำแบบ filter** · **โคลด์บรูว์ หรือกาแฟสกัดเย็น** (`app/turn.py:310` `option_buttons(flow, "brew")`). The prototype drew four short ones (`prototypes/assets/shared.js:184`: เอสเปรสโซ่ / เมนูนม · ดริป / pour-over · โคลด์บรูว์ · ยังไม่แน่ใจ) — so the dry walk's 1.1 *three, not four* (F-13) is a divergence from the design of record, not a runbook error | wrong on screen *(proposed)* | *(at triage)* |
 
 ## Sign-off
 
