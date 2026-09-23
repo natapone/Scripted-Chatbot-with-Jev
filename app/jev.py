@@ -19,6 +19,11 @@ Story 2.1 adds `Client.sibling()` for the speed test's pool: another connection 
 host, **no retry** (an error or a timeout is one failed call, counted — F-9), its own timeout, and the
 same spend meter — so `spent_usd` and `calls` on the server's client count the pool too, and the
 per-process spend cap sees every call.
+
+Story 2.3 keeps two more things from each response: OpenRouter's own server time, from the
+`Server-Timing` header's `cfWorker;dur=` (`JevAnswer.jev_ms` — its worker's time for the request,
+upstream call to Jev included, client network excluded), and `usage.input_tokens` /
+`usage.output_tokens`. `ms` stays the client's round trip; the cost stays `usage.cost`.
 """
 from __future__ import annotations
 
@@ -75,11 +80,15 @@ def _headers(key: str) -> dict:
             "X-Title": "jev-scripted-chatbot"}
 
 
-def _exchange(conn, headers: dict, body: dict) -> tuple[int, dict]:
-    """One request/response on an open connection. Raises what the socket raises."""
+def _exchange(conn, headers: dict, body: dict, meta: dict | None = None) -> tuple[int, dict]:
+    """One request/response on an open connection. Raises what the socket raises. `meta`, when
+    given, receives the response's `Server-Timing` header (None when absent)."""
     payload = json.dumps(body, ensure_ascii=False).encode("utf-8")
     conn.request("POST", PATH, body=payload, headers=headers)
     resp = conn.getresponse()
+    if meta is not None:
+        getheader = getattr(resp, "getheader", None)
+        meta["server_timing"] = getheader("Server-Timing") if callable(getheader) else None
     raw = resp.read()
     try:
         data = json.loads(raw) if raw else {}
@@ -88,13 +97,33 @@ def _exchange(conn, headers: dict, body: dict) -> tuple[int, dict]:
     return resp.status, data if isinstance(data, dict) else {}
 
 
+def server_ms(header: str | None) -> int | None:
+    """OpenRouter's worker time from a `Server-Timing` header — the `cfWorker` entry's `dur`, in whole
+    ms. None when the header, the entry or a number is missing."""
+    if not isinstance(header, str):
+        return None
+    for metric in header.split(","):
+        name, *params = [x.strip() for x in metric.split(";")]
+        if name != "cfWorker":
+            continue
+        for param in params:
+            key, _, value = param.partition("=")
+            if key.strip() == "dur":
+                try:
+                    dur = float(value.strip().strip('"'))
+                except ValueError:
+                    return None
+                return round(dur) if dur >= 0 and dur == dur and dur != float("inf") else None
+    return None
+
+
 def post(key: str, body: dict, connection=http.client.HTTPSConnection, *,
-         host: str = HOST, timeout: float = TIMEOUT) -> tuple[int, dict]:
+         host: str = HOST, timeout: float = TIMEOUT, meta: dict | None = None) -> tuple[int, dict]:
     """One POST /api/v1/systemone on a fresh connection. Returns (status, parsed body); status 0
     when no response came."""
     conn = connect(host, timeout, connection)
     try:
-        return _exchange(conn, _headers(key), body)
+        return _exchange(conn, _headers(key), body, meta)
     except OSError as e:  # DNS, refused, timeout — the message names the class, never the headers
         return 0, {"error": type(e).__name__}
     finally:
@@ -170,7 +199,7 @@ class Client:
                 pass
         self._conn, self._served = None, 0
 
-    def post(self, body: dict) -> tuple[int, dict]:
+    def post(self, body: dict, meta: dict | None = None) -> tuple[int, dict]:
         with self._lock:
             self.meter.add(calls=1)
             attempts = 2 if self.retry and self._conn is not None and self._served > 0 else 1
@@ -178,7 +207,7 @@ class Client:
             for _ in range(attempts):
                 conn = self._conn or self._open()
                 try:
-                    status, data = _exchange(conn, self._headers, body)
+                    status, data = _exchange(conn, self._headers, body, meta)
                 except (OSError, http.client.HTTPException) as e:
                     error = type(e).__name__
                     self._drop()
@@ -219,10 +248,13 @@ class JevAnswer:
     request_id: str | None = None                 # `id`
     t_sent: str = ""                              # ISO-8601 UTC, milliseconds
     t_received: str = ""
-    ms: int = 0                                   # t_received − t_sent, and nothing else
+    ms: int = 0                                   # t_received − t_sent, and nothing else: the round trip
     error: str | None = None                      # None on a well-formed 200; "empty" on 200 without answers;
                                                   # the OSError class name on no response; "http" otherwise
     raw: dict = field(default_factory=dict, repr=False)   # the parsed response body, for the viewer
+    jev_ms: int | None = None                     # Story 2.3: `Server-Timing` cfWorker dur — OpenRouter's server time
+    input_tokens: int | None = None               # `usage.input_tokens`
+    output_tokens: int | None = None              # `usage.output_tokens`
 
 
 def ask(key: str | None, body: dict, *, connection=http.client.HTTPSConnection, clock=now_utc,
@@ -231,15 +263,18 @@ def ask(key: str | None, body: dict, *, connection=http.client.HTTPSConnection, 
     failed or malformed call: `error` says why, `intent` is None, and the stamps are still set.
     With a `client` the call goes over its kept-alive connection and `key` is not used."""
     sent = clock()
+    meta: dict = {}
     if client is not None:
-        status, data = client.post(body)
+        status, data = client.post(body, meta)
     else:
-        status, data = post(key or "", body, connection, host=host, timeout=timeout)
+        status, data = post(key or "", body, connection, host=host, timeout=timeout, meta=meta)
     received = clock()
     t_sent, t_received = stamp(sent), stamp(received)
     ms = _to_ms(received) - _to_ms(sent)
     usage = data.get("usage") if isinstance(data.get("usage"), dict) else {}
     cost = usage.get("cost") or 0.0
+    tokens = {k: usage[k] if isinstance(usage.get(k), int) and not isinstance(usage.get(k), bool) else None
+              for k in ("input_tokens", "output_tokens")}
     request_id = data.get("id") if isinstance(data.get("id"), str) else None
     answers = data.get("answers") if isinstance(data.get("answers"), dict) else {}
 
@@ -261,4 +296,5 @@ def ask(key: str | None, body: dict, *, connection=http.client.HTTPSConnection, 
                      confidence=intent_answer.get("confidence") if error is None else None,
                      probabilities=dict(probabilities) if isinstance(probabilities, dict) else {},
                      entities=entities, cost_usd=float(cost), request_id=request_id,
-                     t_sent=t_sent, t_received=t_received, ms=ms, error=error, raw=data)
+                     t_sent=t_sent, t_received=t_received, ms=ms, error=error, raw=data,
+                     jev_ms=server_ms(meta.get("server_timing")) if status else None, **tokens)

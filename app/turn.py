@@ -878,7 +878,8 @@ def _start_over(store: Store, flow: Flow, s: Session, turn_id: str, at: str, you
 def jev_block(answer: jev.JevAnswer, by_state: bool = False, awaiting: str | None = None) -> dict:
     block = {"status": answer.status, "intent": answer.intent, "confidence": answer.confidence,
              "entities": dict(answer.entities), "t_sent": answer.t_sent, "t_received": answer.t_received,
-             "ms": answer.ms, "cost_usd": answer.cost_usd, "request_id": answer.request_id}
+             "ms": answer.ms, "cost_usd": answer.cost_usd, "request_id": answer.request_id,
+             "jev_ms": answer.jev_ms, "input_tokens": answer.input_tokens, "output_tokens": answer.output_tokens}
     if answer.error is not None:
         block["error"] = answer.error
     if by_state:
