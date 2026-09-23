@@ -100,7 +100,6 @@ button { font: inherit; cursor: pointer; }
 .key-info .status:empty { display: none; }
 .key-info .k { font-size: var(--fs-label); letter-spacing: .04em; text-transform: uppercase; color: var(--panel-ink-2); }
 .key-info .v { font-size: var(--fs-figure); font-weight: 700; color: var(--figure); font-variant-numeric: tabular-nums; line-height: 1.1; transition: opacity .2s; }
-.key-info .v.bump { animation: arrive .6s; }
 
 /* ---- turn viewer: a drawer over the rows only; key-info stays uncovered ---- */
 .viewer { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: #0f1615; border-left: 1px solid var(--panel-line); transform: translateX(100%); transition: transform .2s ease-out; overflow-y: auto; padding: var(--pad); z-index: 5; }
