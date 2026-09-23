@@ -360,17 +360,27 @@ byId.composer.append(new N('input'), Object.assign(new N('span'),{className:'hel
 var document = { createElement:(t)=>new N(t), createTextNode:(t)=>Object.assign(new N('#text'),{own:t}),
   querySelector:(sel)=>{ if (sel.startsWith('#')) { const [id, rest]=sel.slice(1).split(' '); const n=byId[id]??null; return rest&&n ? n.querySelector(rest) : n; } return null; },
   querySelectorAll:(sel)=>Object.values(byId).flatMap(n=>n.querySelectorAll(sel.split('[')[0])), addEventListener(){} };
-var Node = N; var setTimeout = (f)=>{ f(); return 0; }; var clearTimeout = ()=>{};
+var Node = N; const timers = []; var setTimeout = (f, ms)=>{ if (ms === POLL_MS) { timers.push(f); return timers.length; } f(); return 0; }; var clearTimeout = ()=>{};
+async function tick(){ const f = timers.shift(); if (f) await f(); }
+async function drain(){ while (timers.length) await tick(); }
 var sessionStorage = { setItem(){}, getItem(){ return ''; } };
 var location = { href: 'http://127.0.0.1:8768/', search: '' };
 const trail = [];
 var history = { state: null, replaceState(st, t, url){ trail.push(['replace', url]); location.href='http://127.0.0.1:8768'+url; location.search=url.includes('?')?'?'+url.split('?')[1].split('#')[0]:''; } };
-let answers = [];
-var fetch = async (url, opts={}) => { trail.push([opts.method||'GET', url, opts.body ? JSON.parse(opts.body) : null]);
+let answers = []; const states = [];
+var fetch = async (url, opts={}) => { trail.push([opts.method||'GET', url, opts.body ? JSON.parse(opts.body) : null]); states.push(byId.composer.dataset.state);
   const a = answers.shift() || { status: 404, body: { error: 'no answer scripted' } };
   return { ok: (a.status||200) < 400, status: a.status||200, json: async () => a.body }; };
 function at(url){ location.href='http://127.0.0.1:8768'+url; location.search=url.includes('?')?'?'+url.split('?')[1]:''; }
-function freshPage(){ CFG.rate.thb_per_usd = 34.9; fresh('s1'); trail.length=0; answers=[]; }
+function freshPage(){ CFG.rate.thb_per_usd = 34.9; fresh('s1'); trail.length=0; states.length=0; timers.length=0; answers=[]; }
+function item(n, text, masked=false){ const e = { turn_id: 'run-1-'+n, turn_no: n, batch: 'run-1', batch_n: n, outcome: 'matched', response_id: 'shipping', input: { kind: 'typed', text },
+  jev: { status: 200, intent: 'ask_shipping', confidence: 0.9, entities: {}, ms: 800 + n, cost_usd: 0.0002, t_sent: '2026-09-23T10:00:00.000Z', t_received: '2026-09-23T10:00:00.800Z' } };
+  return { entry: e, you: { who: 'you', text, kind: 'typed', masked }, bot: [{ who: 'bot', text: 'ค่าส่ง 40 บาทค่ะ', buttons: [], variant: 'plain', response_id: 'shipping' }],
+    raw: { request: { state: { customer_said: text, shop_said: 'hi', history: [] }, questions: { intent: {} } }, response: { id: 'gen-'+n } } }; }
+function screen(){ return { you: byId.messages.children.filter(n => n.cls().includes('you')).map(n => [n.getAttribute('data-testid'), n.textContent, n.getAttribute('data-masked')]),
+  bot: byId.messages.children.filter(n => n.cls().includes('bot')).map(n => n.getAttribute('data-testid')), bubbles: byId.messages.querySelectorAll('.bubble').length,
+  rows: byId.rows.children.map(r => r.getAttribute('data-testid') || r.className), turns: byId['total-turns'].textContent, usd: byId['key-info'].getAttribute('data-total-usd'),
+  avg: byId['avg-ms'].textContent, composer: byId.composer.dataset.state, input_disabled: byId.composer.querySelector('input').disabled, log: S.session.log.length, status: byId['key-status'].textContent }; }
 """
 
     def page(self, script):
@@ -415,6 +425,45 @@ function freshPage(){ CFG.rate.thb_per_usd = 34.9; fresh('s1'); trail.length=0; 
         self.assertEqual([t[:2] for t in out["trail"]], [["replace", "/"], ["POST", "/api/run"]])   # no GET: nothing streams
         self.assertEqual((out["status"], out["badge"], out["turns"]), ("● spend cap reached", "cap", "0"))
         self.assertEqual((out["rows"], out["bubbles"], out["composer"]), (["empty"], 0, "ready"))
+
+
+    def test_run_streams_on_the_same_screen(self):  # AC-3
+        out = self.page(
+            "freshPage(); at('/?run=100');"
+            "answers=[{ body: { refused: false, run_id: 'run-1', state: 'running' } },"
+            " { body: { run_id: 'run-1', state: 'running', next: 2, items: [item(1, 'ค่าส่งเท่าไหร่คะ'), item(2, '[delivery details]', true)] } },"
+            " { body: { run_id: 'run-1', state: 'done', next: 3, items: [item(3, 'มีกาแฟอะไรบ้าง')] } }];"
+            "await speedFromAddress(); const during = screen(); await drain(); const after = screen();"
+            "S.session.raw['run-1-3'] && openViewer(3);"
+            "console.log(JSON.stringify({ trail, states, during, after, viewer: byId['viewer-sent'].textContent }));")
+        self.assertEqual([t[:2] for t in out["trail"]], [["replace", "/"], ["POST", "/api/run"],
+                                                         ["GET", "/api/run?session_id=s1&since=0"], ["GET", "/api/run?session_id=s1&since=2"]])
+        self.assertEqual(out["states"], ["ready", "judging", "judging"])       # disabled from the first ask to the end
+        d, a = out["during"], out["after"]
+        self.assertEqual((d["composer"], d["input_disabled"], d["turns"], d["rows"]), ("judging", True, "2", ["turn-2", "turn-1"]))
+        # the same chat column: customer bubble, then Beanly's prepared reply; masked text stays masked
+        self.assertEqual(a["you"], [["you-1", "ค่าส่งเท่าไหร่คะ", "false"], ["you-2", "[delivery details]", "true"], ["you-3", "มีกาแฟอะไรบ้าง", "false"]])
+        self.assertEqual(a["bot"], ["bot-run-1-1-1", "bot-run-1-2-1", "bot-run-1-3-1"])
+        # the same panel, newest first; the key-info block from the log; the composer ready at the end
+        self.assertEqual((a["rows"], a["turns"], a["log"], a["usd"], a["avg"]), (["turn-3", "turn-2", "turn-1"], "3", 3, "0.000600", "800 ms"))
+        self.assertEqual((a["composer"], a["input_disabled"], a["status"]), ("ready", False, ""))
+        self.assertIn("customer_said|มีกาแฟอะไรบ้าง", out["viewer"])         # `open` on a run row shows its request
+
+    def test_start_over_during_a_run_stops_the_stream(self):  # AC-6
+        out = self.page(
+            "freshPage(); at('/?run=100');"
+            "answers=[{ body: { refused: false, run_id: 'run-1', state: 'running' } },"
+            " { body: { run_id: 'run-1', state: 'running', next: 1, items: [item(1, 'ค่าส่งเท่าไหร่คะ')] } },"
+            " { body: { ended: true, session_id: 's1' } },"
+            " { body: { session_id: 's2', new: true, turn_no: 0, transcript: [{ who: 'bot', id: 'm1', text: 'สวัสดีค่ะ Beanly นะคะ', buttons: [{ label: 'ดูเมล็ดกาแฟ', intent: 'browse' }] }], log: [], raw: {} } }];"
+            "await speedFromAddress(); const during = screen(); await startOver(); await drain();"
+            "console.log(JSON.stringify({ trail, during, after: screen(), id: S.session.id, running: speedRunning() }));")
+        self.assertEqual(out["during"]["composer"], "judging")
+        self.assertEqual([t[:2] for t in out["trail"]][-2:], [["POST", "/api/session/end"], ["GET", "/api/session?id="]])
+        self.assertEqual(sum(t[1].startswith("/api/run") for t in out["trail"]), 2)   # no ask after start-over; no second run
+        a = out["after"]
+        self.assertEqual((out["id"], out["running"], a["bot"], a["you"], a["rows"], a["turns"], a["composer"]),
+                         ("s2", False, ["bot-m1"], [], ["empty"], "0", "ready"))
 
 
 if __name__ == "__main__":

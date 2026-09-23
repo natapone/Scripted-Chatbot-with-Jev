@@ -251,7 +251,8 @@ async function load(id) {
 }
 /* StartOverButton: the session is ended and a new one created — a new id (session-state.md). */
 async function startOver() {
-  const comp = $("#composer"); if (comp.dataset.state === "judging") return;
+  const comp = $("#composer"); const streaming = typeof speedRunning === "function" && speedRunning();
+  if (comp.dataset.state === "judging" && !streaming) return;    // a run streaming may be started over
   setComposer("judging");
   try { if (S.session?.id) await unwrap(await fetch("/api/session/end", post({ session_id: S.session.id }))); await load(""); }
   catch (e) { await failed(e); }
