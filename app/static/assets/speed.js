@@ -6,7 +6,8 @@
 
 const RUN_TARGETS = [100, 1000];
 const POLL_MS = 150;                     // how often the page asks for the answers that have arrived
-const RUN = { id: "", session: "", next: 0, timer: 0, streaming: false };
+const KEEP_BUBBLES = 40;                 // the chat column keeps the newest 40 bubbles while a run streams
+const RUN = { id: "", session: "", next: 0, timer: 0, streaming: false, held: [] };
 
 /* The target the address asks for: exactly `100` or `1000`, anything else is no run. */
 function runTarget(search) {
@@ -35,7 +36,7 @@ async function speedStart(target) {
   catch (e) { await failed(e); return; }
   if (r.refused) { showStatus(null, { status: "cap", line: "● spend cap reached" }); fitViewer(); return; }
   if (S.session?.id !== id) return;                          // started over while the run was asked for
-  Object.assign(RUN, { id: r.run_id, session: id, next: 0, streaming: true });
+  Object.assign(RUN, { id: r.run_id, session: id, next: 0, streaming: true, held: [] });
   setComposer("judging");                                    // the composer's own disabled state
   await speedPoll();
 }
@@ -57,10 +58,18 @@ function speedDraw(items) {
     you(it.you);
     (it.bot || []).forEach((b, k) => bot({ ...b, id: `${e.turn_id}-${k + 1}` }));
     s.log.push(e); s.turn_no = Math.max(s.turn_no, e.turn_no || 0);
-    if (it.raw) s.raw[e.turn_id] = it.raw;
+    if (it.raw) { s.raw[e.turn_id] = it.raw; RUN.held.push(e.turn_id); }
     if (e.jev) addTurnRow(e, s.log.length);
   }
+  while (RUN.held.length > KEEP_ROWS) delete s.raw[RUN.held.shift()];   // raw bodies only for the rows on screen
+  speedTrim();
   if (items.length) updateKeyInfo();
+}
+/* The oldest bubbles leave the chat column, and a set of buttons whose bubble has gone goes with it. */
+function speedTrim() {
+  const m = $("#messages"); let n = m.querySelectorAll(".bubble").length;
+  while (n > KEEP_BUBBLES && m.firstElementChild) { if (m.firstElementChild.classList.contains("bubble")) n -= 1; m.firstElementChild.remove(); }
+  while (m.firstElementChild && !m.firstElementChild.classList.contains("bubble")) m.firstElementChild.remove();
 }
 /* The stream ends: the screen keeps the last chats and the totals; the composer is ready. */
 function speedStop() {
@@ -70,4 +79,4 @@ function speedStop() {
 }
 function speedRunning() { return RUN.streaming; }
 /* Start over (fresh): nothing more is drawn; the server has already stopped the run. */
-function speedReset() { clearTimeout(RUN.timer); Object.assign(RUN, { id: "", session: "", next: 0, streaming: false }); }
+function speedReset() { clearTimeout(RUN.timer); Object.assign(RUN, { id: "", session: "", next: 0, streaming: false, held: [] }); }

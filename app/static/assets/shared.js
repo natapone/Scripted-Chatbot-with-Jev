@@ -153,6 +153,7 @@ function intentLine(e) {
   if (j.by_state) return `${e.response_id || "inform"} · by state${j.awaiting ? ` (awaiting ${j.awaiting})` : ""}`;
   return j.intent ?? "—";
 }
+const KEEP_ROWS = 50;   // the panel keeps the newest 50 rows; the log, and so the key-info block, keeps every turn
 function addTurnRow(e, n, animate = true) {
   const rows = $("#rows"); $("#rows .empty")?.remove(); const j = e.jev;
   const row = el("div", { class: animate ? "turn arrived" : "turn", "data-testid": `turn-${n}`, "data-turn-id": e.turn_id || "", "data-outcome": e.outcome, "data-at": e.at || "" });
@@ -171,6 +172,7 @@ function addTurnRow(e, n, animate = true) {
   t4.append(el("span", { "data-testid": `turn-${n}-ms`, "data-value": j?.ms ?? 0, text: j ? fmt.ms(j.ms || 0) : "—" }), el("span", { "data-testid": `turn-${n}-baht`, "data-value": j?.cost_usd ?? 0, text: j && j.cost_usd ? fmt.baht(j.cost_usd) : "฿0" }), el("span", { "data-testid": `turn-${n}-usd`, "data-value": j?.cost_usd ?? 0, text: j && j.cost_usd ? fmt.usd(j.cost_usd) : "—" }));
   t4.append(el("button", { class: "open", "data-testid": `turn-${n}-open`, text: "open", onclick: () => openViewer(n) }));
   row.append(t4); rows.prepend(row);
+  while (rows.children.length > KEEP_ROWS) rows.lastElementChild.remove();
 }
 function updateKeyInfo() {
   const s = S.session; const answered = (s?.log || []).filter((e) => e.jev && e.outcome !== "model_failed" && e.outcome !== "cap_reached");
@@ -245,7 +247,7 @@ async function load(id) {
   S.session.log = v.log || []; S.session.raw = v.raw || {};
   let wrap = null;
   for (const m of v.transcript || []) { if (m.who === "you") { if (m.kind === "clicked") pressed(wrap, m.text); you(m); } else wrap = bot(m) || wrap; }
-  S.session.log.forEach((e, i) => { if (e.jev) addTurnRow(e, i + 1, false); });
+  S.session.log.map((e, i) => [e, i + 1]).filter(([e]) => e.jev).slice(-KEEP_ROWS).forEach(([e, n]) => addTurnRow(e, n, false));
   updateKeyInfo();
   return v;
 }

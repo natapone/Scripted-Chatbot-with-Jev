@@ -466,5 +466,29 @@ function screen(){ return { you: byId.messages.children.filter(n => n.cls().incl
                          ("s2", False, ["bot-m1"], [], ["empty"], "0", "ready"))
 
 
+    def test_a_run_of_1000_keeps_the_dom_bounded(self):  # AC-4, AC-6 (reload)
+        out = self.page(
+            "freshPage(); at('/?run=1000');"
+            "answers=[{ body: { refused: false, run_id: 'run-1', state: 'running' } }];"
+            "for (let k = 0; k < 10; k++) answers.push({ body: { run_id: 'run-1', state: k < 9 ? 'running' : 'done', next: (k + 1) * 100,"
+            " items: Array.from({ length: 100 }, (_, i) => item(k * 100 + i + 1, 'ข้อความ ' + (k * 100 + i + 1))) } });"
+            "await speedFromAddress(); await drain(); const run = screen();"
+            "const firstYou = byId.messages.firstElementChild.getAttribute('data-testid'); const raw = Object.keys(S.session.raw).length;"
+            "const log = S.session.log.map(it => it);"
+            # a reload: the session view holds the chat's transcript (the greeting) and the whole log
+            "answers=[{ body: { session_id: 's1', new: false, turn_no: 1000, transcript: [{ who: 'bot', id: 'm1', text: 'สวัสดีค่ะ', buttons: [] }], log, raw: {} } }];"
+            "at('/'); await load('s1'); await speedFromAddress();"
+            "console.log(JSON.stringify({ run, firstYou, raw, reload: screen(), asked: trail.filter(t => t[1].startsWith('/api/run')).length }));")
+        run, reload = out["run"], out["reload"]
+        self.assertEqual((run["bubbles"], len(run["rows"]), run["rows"][0], run["rows"][-1]), (40, 50, "turn-1000", "turn-951"))
+        self.assertEqual(out["firstYou"], "you-981")                     # the newest 20 exchanges, starting on a customer bubble
+        self.assertEqual((run["turns"], run["log"], out["raw"], run["composer"]), ("1000", 1000, 50, "ready"))
+        self.assertEqual(run["usd"], f"{1000 * 0.0002:.6f}")
+        # reloaded after the run: the chat's own transcript, the totals of the whole log, the newest 50 rows, no run
+        self.assertEqual((reload["bot"], reload["you"], reload["turns"], len(reload["rows"]), reload["rows"][0], reload["rows"][-1]),
+                         (["bot-m1"], [], "1000", 50, "turn-1000", "turn-951"))
+        self.assertEqual(out["asked"], 11)                               # the run's POST and ten asks; nothing on reload
+
+
 if __name__ == "__main__":
     unittest.main()
