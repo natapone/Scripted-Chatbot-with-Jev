@@ -229,13 +229,14 @@ async function runSession(n: 1 | 2) {
                                recap.calls, { timeout: 30_000 }).catch(() => {});
     await composerReady();
     const shown = await page.evaluate(() => ({ turns: document.querySelector('#total-turns')?.textContent,
-      baht: document.querySelector('#total-baht')?.textContent, avg: document.querySelector('#avg-ms')?.textContent,
+      baht: document.querySelector('#total-baht')?.textContent, tp: document.querySelector('#throughput')?.textContent,
       usd: document.querySelector('[data-testid="key-info"]')?.getAttribute('data-total-usd') }));
     assertions.push({ ok: recap.calls === RUN_SIZE, what: `the run's calls equal the target ${RUN_SIZE}`, value: recap.calls });
     assertions.push({ ok: recap.concurrency === 32, what: 'the subtitle\'s "32 at a time" is the run\'s concurrency', value: recap.concurrency });
     assertions.push({ ok: Math.abs(Number(shown.usd) - recap.total_usd) < 1e-6, what: 'key-info TOTAL COST ($) equals the recap total_usd', value: `${shown.usd} vs ${recap.total_usd}` });
     assertions.push({ ok: Number(String(shown.turns).replace(/,/g, '')) === recap.calls, what: 'key-info TURNS equals the recap calls', value: `${shown.turns}` });
-    assertions.push({ ok: true, what: 'key-info as shown at the end of the run', value: `${shown.avg} · ${shown.baht} · ${shown.turns}` });
+    assertions.push({ ok: shown.tp === `${recap.calls_per_s.toFixed(1)} /s`, what: 'key-info THROUGHPUT equals the recap calls_per_s', value: `${shown.tp} vs ${recap.calls_per_s}` });
+    assertions.push({ ok: true, what: 'key-info as shown at the end of the run', value: `${shown.tp} · ${shown.baht} · ${shown.turns}` });
   }
 
   async function recapCard() {
