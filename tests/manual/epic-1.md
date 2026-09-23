@@ -153,3 +153,18 @@ above was edited; findings F-13 and F-2 carry the corrections to `orb4b-triage`.
 - **3.6:** after 3.5b's hesitation the reply offers เปลี่ยนสินค้า · เปลี่ยนจำนวน · เปลี่ยนวิธีชำระ and
   the read-back's **ยืนยัน** is no longer live (the prototype does the same). **Type ยืนยันค่ะ** — it
   is a matched `affirm` and gives the order code.
+
+Appended by Story 2.7 (2026-09-23). No row above was edited.
+
+- **No sample button, no click tag.** The delivery question now reads only
+  *รบกวนขอชื่อ ที่อยู่ และเบอร์โทรสำหรับจัดส่งค่ะ* and offers **no button**; the details are always
+  typed. A clicked option's echo carries no *clicked · no model call* tag (1.1 still: the click is
+  echoed as your message, no model call, no panel row). After a transfer order is confirmed, the
+  order-code line ends at *โอนแล้วรบกวน reply slip ด้วยน้า*.
+- **1.8** is unchanged — it already types. **2.3** and **3.4b**: instead of clicking
+  **ใช้ข้อมูลตัวอย่าง**, **type a fictional name, address and phone**, e.g.
+  `สมชาย ใจดี 123/4 ซอยสุขุมวิท 50 คลองเตย กรุงเทพ 10110 โทร 081-000-0000`. Expect the same
+  read-back totals as the rows say (2.3: **1,270**; 3.4b: two lines, the 80-baht discount, COD fee),
+  the read-back showing your text, and the panel row reading `[delivery details]`.
+- **Counts that move:** the typed address is a Jev call. § 2 is **five** typed turns at 2.4, not
+  four; § 3 gains one typed turn and one panel row at 3.4b.
