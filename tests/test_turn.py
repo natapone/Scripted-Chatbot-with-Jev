@@ -1001,6 +1001,32 @@ class OrderTests(unittest.TestCase):
         res = r.typed("มีโปรอะไรบ้าง", "t6")
         self.assertEqual([b["response_id"] for b in res["bot"]], ["ask_promotion", "resume:quantity"])
 
+    def test_browse_by_roast_or_brew_lists_only_the_matching(self):  # F-15; catalogue browse_catalog, contract § browse_catalog
+        r = Rig(self, (200, reply("browse_catalog", 0.8, roast="light")), (200, reply("browse_catalog", 0.8, brew="filter")),
+                (200, reply("browse_catalog", 0.8, roast="medium", brew="filter")))
+        # the walk's W-1: "do you have a light roast?" lists the light roasts, each a button
+        res = r.typed("มีแบบคั่วอ่อนไม๊", "t1")
+        self.assertEqual(res["outcome"], "matched")
+        self.assertEqual(res["bot"][0]["text"].split("\n")[0], "ตัวคั่วอ่อนมี 3 ตัวค่ะ")
+        self.assertEqual(res["bot"][0]["text"].count("📍"), 3)
+        self.assertEqual([b["params"] for b in res["bot"][0]["buttons"]], [{"product": "DH-001"}, {"product": "DH-003"}, {"product": "MM-001"}])
+        self.assertEqual(r.state().options_shown, ["DH-001", "DH-003", "MM-001"])
+        self.assertEqual(res["log_entry"]["applied"], [{"set": "recommend.roast", "to": "light"}])
+        self.assertEqual(r.state().order["recommend"], {"brew": None, "roast": "light"})
+        # a brew alone lists what suits it
+        res = r.typed("มีตัวไหนเหมาะดริปบ้าง", "t2")
+        self.assertTrue(res["bot"][0]["text"].startswith("ตัวที่เหมาะกับดริปมี 3 ตัวค่ะ\n📍 เกอิชา: "))
+        # a roast and a brew: the products fitting both (four — the most that become buttons)
+        res = r.typed("คั่วกลางไว้ดริปมีไหม", "t3")
+        self.assertEqual(len(res["bot"][0]["buttons"]), 4)
+        self.assertEqual(r.state().options_shown, ["DH-002", "KBN-001", "KBN-003", "MM-002"])
+        self.assertEqual(r.state().order["recommend"], {"brew": "filter", "roast": "medium"})
+        # the matcher: roast by the note's first part, decaf by keyword, both → roast alone when nothing fits both
+        self.assertEqual(order.matching(FLOW.products, "dark", None), ["KBN-002", "MM-004"])
+        self.assertEqual(order.matching(FLOW.products, "decaf", "cold_brew"), ["KBN-003"])
+        self.assertEqual(order.matching(FLOW.products, "dark", "espresso_milk"), ["KBN-002"])
+        self.assertEqual(order.matching(FLOW.products, None, None), [])
+
     def test_f4_first_miss_after_a_faq_offers_the_help_buttons(self):  # Findings F-4, fixed here
         r = Rig(self, (200, reply("faq.shipping_fee", 0.97)), (200, reply("none", 0.93)))
         res = r.typed("ค่าส่งเท่าไหร่คะ", "t1")
