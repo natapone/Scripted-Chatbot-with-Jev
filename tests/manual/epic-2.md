@@ -104,6 +104,18 @@ Notes: 1.4 and 1.5 are run right after 1.3, before 1.7 starts a new session file
 is scored against the test set's labels; a handful short of 100 is the model's real accuracy on
 video, not a defect.
 
+### § 1 Deltas — the page since this runbook was written
+
+The rows above were written before the key-info block gained its fourth figure and AVG RESPONSE
+changed to the provider's server time. Where a row and this list disagree, this list is the build:
+
+| Row | Read it as |
+|---|---|
+| Preconditions | The key-info block has **four** figures and reads `— · ฿0.000 · 0 · —` (AVG RESPONSE · TOTAL COST · TOTAL TURNS · AVG TOKENS / TURN) |
+| 1.3 | AVG RESPONSE is OpenRouter's **server time** (`Server-Timing` cfWorker), not the round trip; AVG TOKENS / TURN is filled too (about 4,200). At a rate near 33, TOTAL COST is about **฿0.6** |
+| 1.5 | The route is `curl -s 'http://127.0.0.1:8768/api/run?session_id=<id>&since=100'`, where `<id>` is the name of the file 1.4 read (without `.json`); the figures are under `recap`. **`avg_jev_ms` equals AVG RESPONSE**; `avg_ms` is the average round trip and is larger. `avg_input_tokens` equals AVG TOKENS / TURN |
+| 1.10 | Besides the status line, the header's badge reads **CAP** instead of LIVE — the cap's own state. Nothing else changes |
+
 ## §§ 2–3 — Stops 1 and 2: a record, not walked
 
 Both confirmed by the owner on 2026-09-23, **before any of Epic 2 was built**:
