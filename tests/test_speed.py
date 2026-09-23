@@ -98,7 +98,8 @@ class Rig:
 class RunTests(unittest.TestCase):
 
     def test_every_message_is_a_row_numbered_and_scored(self):  # AC-1, AC-2, AC-3
-        fallback, refused, slow, broken = CASES[0]["text"], CASES[1]["text"], CASES[2]["text"], CASES[3]["text"]
+        at = lambda n: CASES[speed.case_index(n - 1, len(CASES))]      # the case row n sends
+        fallback, refused, slow, broken = at(1)["text"], at(2)["text"], at(3)["text"], at(4)["text"]
         conn = labelled(none={fallback}, fail={refused}, timeout={slow}, http={broken})
         r = Rig(self, conn)
         with mock.patch.object(r.store, "_write", wraps=r.store._write) as write:
@@ -118,7 +119,7 @@ class RunTests(unittest.TestCase):
         for c in CASES[:20]:
             sent = next(b for b in conn.log["sent"] if b["state"]["customer_said"] == c["text"])
             self.assertEqual(sent, turn.build_request(testset.build_session(c, FLOW), c["text"], FLOW))
-        # errors: the refused, the timed-out and the 500 — each case sent twice in 140 (n and n+129) for the first 11
+        # errors: the refused, the timed-out and the 500 — rows 2-4, sent again at rows 131-133 (the set is cycled)
         by = {e["batch_n"]: e for e in batch}
         self.assertEqual((by[2]["outcome"], by[2]["jev"]["error"]), ("model_failed", "ConnectionRefusedError"))
         self.assertEqual((by[3]["outcome"], by[3]["jev"]["error"]), ("model_failed", "TimeoutError"))
@@ -131,14 +132,14 @@ class RunTests(unittest.TestCase):
         # the page's items: one per row, with the prepared reply and no buttons
         self.assertEqual(len(run.items), 140)
         item = next(i for i in run.items if i["entry"]["batch_n"] == 5)
-        self.assertEqual(item["you"]["text"], CASES[4]["text"])
+        self.assertEqual(item["you"]["text"], at(5)["text"])
         self.assertTrue(item["bot"] and all(b["buttons"] == [] for b in item["bot"]))
         self.assertEqual(next(i for i in run.items if i["entry"]["batch_n"] == 2)["bot"][0]["response_id"], "system.unreachable")
         # nothing else of the session was written by the run
         self.assertEqual((s.contexts, s.order, len(s.transcript)), ({}, session.empty_order(), 1))
         # NFR10: delivery details masked in the entry, the bubble and the retained request; never in the file
-        masked = [e for e in batch if CASES[(e["batch_n"] - 1) % 129]["intent"] == "give_delivery_details"]
-        self.assertTrue(masked)
+        masked = [e for e in batch if at(e["batch_n"])["intent"] == "give_delivery_details"]
+        self.assertEqual(len(masked), 3)
         for e in masked:
             self.assertEqual(e["input"]["text"], turn.MASK_FOR_LOG)
             self.assertEqual(s.raw[e["turn_id"]]["request"]["state"]["customer_said"], turn.MASK_FOR_JEV)
@@ -149,6 +150,15 @@ class RunTests(unittest.TestCase):
         for d in DELIVERY:
             self.assertNotIn(d, text)
         self.assertNotIn(FAKE_KEY, text)
+
+    def test_the_set_is_cycled_so_a_hundred_meets_the_whole_catalogue(self):  # AC-1, AC-3
+        order = [speed.case_index(i, len(CASES)) for i in range(len(CASES))]
+        self.assertEqual(sorted(order), list(range(len(CASES))))                 # every case once per cycle
+        first = [CASES[j] for j in order[:100]]
+        self.assertEqual(sum(c["intent"] == "give_delivery_details" for c in first), 3)
+        self.assertGreaterEqual(sum(c["intent"] == "none" for c in first), 3)
+        self.assertEqual(len({c["intent"] for c in first}), len({c["intent"] for c in CASES}))
+        self.assertEqual([speed.case_index(i, 10) for i in range(10)], list(range(10)))   # no coprime stride → in order
 
     def test_thirty_two_in_flight_at_once(self):  # AC-1
         barrier = threading.Barrier(32, timeout=5)
@@ -231,7 +241,7 @@ class CapAndRecapTests(unittest.TestCase):
         self.assertEqual((p["state"], p["model_status"], p["recap"]["errors"], p["recap"]["calls"]), ("capped", "cap", 1, 6))
 
     def test_recap_from_the_log_agrees_with_the_key_info_block(self):  # AC-5
-        conn = labelled(fail={CASES[1]["text"]}, cost=0.000163)
+        conn = labelled(fail={CASES[speed.case_index(1, len(CASES))]["text"]}, cost=0.000163)
         r = Rig(self, conn)
         started, run = r.run(140)
         p = r.runs.progress(r.s.session_id, since=130)

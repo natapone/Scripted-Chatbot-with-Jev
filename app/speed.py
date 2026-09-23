@@ -1,6 +1,6 @@
 """The speed test's engine (FR26; contract `session-state.md` § The speed test and the lock).
 
-A run sends `target` messages from the catalogue's test set (`app/testset.py`, cycled) to Jev with
+A run sends `target` messages from the catalogue's test set (`app/testset.py`, cycled by `case_index`) to Jev with
 `CONCURRENCY` in flight, each built by `turn.classify` exactly as the chat builds a typed turn for
 that case's contexts and pending slot. **Requests are concurrent; commits are serialised**: each
 answer, as it completes, takes the session's lock, gets the next `turn_no`, and is appended to the
@@ -20,6 +20,7 @@ retained request (NFR10). Nothing here is drawn on the page by this module (DR-0
 """
 from __future__ import annotations
 
+import math
 import threading
 import time
 import uuid
@@ -33,8 +34,17 @@ CONCURRENCY = 32                  # S-4: 1,000 turns in 12.6 s at 32 in flight
 CALL_TIMEOUT_S = 5.0              # F-9: a slow call frees its slot after this; F-12 saw none past 5 s
 FAIL_STREAK = 32                  # failed calls in a row that end the run (S-3 saw 57 empty in a row)
 MAX_TARGET = 1000                 # FR26: 100 to rehearse, 1,000 to record
+STRIDE = 5                        # the order the set is cycled in: every 5th case, so a run of 100 meets
+                                  # the whole catalogue — delivery details (cases 106–108) included
 EST_TURN_USD = 0.0002             # S-4 measured $0.000163 a turn; the refusal estimates on the safe side
 FAILED = ("model_failed", "cap_reached")
+
+
+def case_index(i: int, n_cases: int) -> int:
+    """The case the `i`-th message of a run sends (0-based): the set cycled with a stride coprime to
+    its size, so every case is sent once per `n_cases` messages and none is skipped."""
+    stride = STRIDE if math.gcd(STRIDE, n_cases) == 1 else 1
+    return (i * stride) % n_cases
 
 
 class RunError(Exception):
@@ -202,7 +212,7 @@ class Runs:
                         return
                     i = run._next
                     run._next += 1
-                case = self.cases[i % len(self.cases)]
+                case = self.cases[case_index(i, len(self.cases))]
                 cs = testset.build_session(case, self.flow)
                 at = jev.stamp(self.clock())
                 v = turn.classify(cs, case["text"], self.flow, client, spend_cap_usd=self.spend_cap_usd,
