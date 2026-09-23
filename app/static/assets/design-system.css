@@ -94,8 +94,8 @@ button { font: inherit; cursor: pointer; }
 .badge.cap::before { content: "● "; color: var(--warn); }
 .badge.fallback { background: rgba(226,176,74,.2); color: var(--warn); }
 .badge.model-failed { background: rgba(228,107,92,.2); color: var(--bad); }
-/* key-info block — fixed at the bottom of the panel column; three figures, nothing else */
-.key-info { border-top: 2px solid var(--figure); padding: 12px var(--pad) 14px; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; background: var(--panel); }
+/* key-info block — fixed at the bottom of the panel column; four figures, nothing else (Story 2.3: avg tokens / turn) */
+.key-info { border-top: 2px solid var(--figure); padding: 12px var(--pad) 14px; display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 8px; background: var(--panel); }
 .key-info .status { grid-column: 1 / -1; font-size: 13px; color: var(--warn); min-height: 0; }
 .key-info .status:empty { display: none; }
 .key-info .k { font-size: var(--fs-label); letter-spacing: .08em; text-transform: uppercase; color: var(--panel-ink-2); }

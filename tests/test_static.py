@@ -82,7 +82,7 @@ class StaticTests(unittest.TestCase):
 
     # 05_components.md's tokens for the chat screen (P-001 / W-001), by the component that owns them
     TOKENS = {
-        "index.html": ("chat", "messages", "composer", "send", "start-over", "panel", "key-info", "avg-ms",
+        "index.html": ("chat", "messages", "composer", "send", "start-over", "panel", "key-info", "avg-ms", "avg-tokens",
                        "total-baht", "total-turns", "viewer", "viewer-close", "viewer-sent", "viewer-back",
                        "viewer-applied", "rate", "rate-date", "model-status", "band-top", "band-bottom",
                        "viewer-raw-request", "viewer-raw-response"),              # Story 1.5: the page's own <details>
@@ -90,7 +90,7 @@ class StaticTests(unittest.TestCase):
                       "turn-${n}-confidence", "turn-${n}-ms", "turn-${n}-baht", "turn-${n}-usd", "turn-${n}-open",
                       "turn-${n}-prov-product",                              # Story 1.5: F-1, now named by the design
                       "readback", "readback-total",                        # Story 1.4: the ReadBack component, from server data
-                      "turn-${n}-at"),                                     # Story 2.3: the row's receive time
+                      "turn-${n}-at", "turn-${n}-jev"),                    # Story 2.3: receive time, server time
     }                                                                        # Story 2.2: speed.js's tokens are gone (DR-010)
 
     def test_page_carries_every_token(self):
@@ -105,7 +105,7 @@ class StaticTests(unittest.TestCase):
                     self.assertIn(f'"data-testid": "{token}"', served[name], f"{token} in {name}")
         # the figures a driver reads carry data-value; the composer its state; a button its liveness
         js = served["shared.js"]
-        for figure in ("avg-ms", "total-baht", "total-turns"):
+        for figure in ("avg-ms", "total-baht", "total-turns", "avg-tokens"):
             self.assertIn(f'set("#{figure}"', js, figure)
         self.assertIn('"data-value": j?.ms', js)
         self.assertIn('"data-value": j?.cost_usd', js)
@@ -292,7 +292,7 @@ var Node = N; var setTimeout = (f)=>f();
     def test_badge_and_status_line_follow_the_last_typed_turn(self):  # AC-4; walk hazard
         html = self.get("/")[1]
         self.assertIn('data-testid="model-status" id="model-status" data-status="live"', html)
-        ok = lambda n, cost=0.000164: {"turn_id": f"t{n}", "outcome": "matched", "input": {"text": "x"}, "jev": {"status": 200, "ms": 300 + n, "cost_usd": cost}}
+        ok = lambda n, cost=0.000164: {"turn_id": f"t{n}", "outcome": "matched", "input": {"text": "x"}, "jev": {"status": 200, "ms": 300 + n, "jev_ms": 200 + n, "cost_usd": cost}}
         down = {"turn_id": "tf", "outcome": "model_failed", "input": {"text": "x"}, "jev": {"status": 0, "error": "ConnectionRefusedError", "ms": 0, "cost_usd": 0}}
         cap = {"turn_id": "tc", "outcome": "cap_reached", "input": {"text": "x"}, "jev": {"status": 0, "error": "cap", "ms": 0, "cost_usd": 0.0}}
         clicked = {"turn_id": "tk", "outcome": "matched", "input": {"kind": "clicked", "text": "1 ถุง"}}
@@ -307,7 +307,7 @@ var Node = N; var setTimeout = (f)=>f();
         out = self.node(script)
         self.assertEqual(out[0][:4], ["live", "badge live", "live", ""])
         self.assertEqual(out[1][:4], ["down", "badge down", "down", "● unreachable · ConnectionRefusedError"])
-        self.assertEqual((out[1][4], out[1][5]), ("0.000164", "300 ms"))             # the failed turn is not counted
+        self.assertEqual((out[1][4], out[1][5]), ("0.000164", "200 ms"))             # the failed turn is not counted; AVG is server time (2.3)
         self.assertEqual(out[2][:4], out[1][:4])                                     # a click makes no call: still down
         self.assertEqual(out[3][:4], ["live", "badge live", "live", ""])             # the next answered call: live, line gone
         self.assertEqual(out[4][:4], ["cap", "badge cap", "cap", "● spend cap reached"])
@@ -358,7 +358,7 @@ class N { constructor(tag){ this.tag=tag; this.kids=[]; this.attrs={}; this.styl
   querySelectorAll(sel){ return this.all().filter(n=>n.match(sel)); } querySelector(sel){ return this.querySelectorAll(sel)[0]||null; }
   addEventListener(){} closest(){ return null; } }
 const byId = {};
-for (const id of ['messages','rows','viewer','viewer-title','viewer-sent','viewer-back','viewer-applied','viewer-raw-request','viewer-raw-response','key-info','key-status','model-status','avg-ms','total-baht','total-turns','composer']) byId[id]=new N('div');
+for (const id of ['messages','rows','viewer','viewer-title','viewer-sent','viewer-back','viewer-applied','viewer-raw-request','viewer-raw-response','key-info','key-status','model-status','avg-ms','total-baht','total-turns','avg-tokens','composer']) byId[id]=new N('div');
 byId.composer.append(new N('input'), Object.assign(new N('span'),{className:'helper'})); byId.composer.dataset.state='ready';
 var document = { createElement:(t)=>new N(t), createTextNode:(t)=>Object.assign(new N('#text'),{own:t}),
   querySelector:(sel)=>{ if (sel.startsWith('#')) { const [id, rest]=sel.slice(1).split(' '); const n=byId[id]??null; return rest&&n ? n.querySelector(rest) : n; } return null; },
@@ -377,7 +377,7 @@ var fetch = async (url, opts={}) => { trail.push([opts.method||'GET', url, opts.
 function at(url){ location.href='http://127.0.0.1:8768'+url; location.search=url.includes('?')?'?'+url.split('?')[1]:''; }
 function freshPage(){ CFG.rate.thb_per_usd = 34.9; fresh('s1'); trail.length=0; states.length=0; timers.length=0; answers=[]; }
 function item(n, text, masked=false){ const e = { turn_id: 'run-1-'+n, turn_no: n, batch: 'run-1', batch_n: n, outcome: 'matched', response_id: 'shipping', input: { kind: 'typed', text },
-  jev: { status: 200, intent: 'ask_shipping', confidence: 0.9, entities: {}, ms: 800 + n, cost_usd: 0.0002, t_sent: '2026-09-23T10:00:00.000Z', t_received: '2026-09-23T10:00:00.800Z' } };
+  jev: { status: 200, intent: 'ask_shipping', confidence: 0.9, entities: {}, ms: 800 + n, jev_ms: 500 + n, input_tokens: 1500 + n, output_tokens: 12, cost_usd: 0.0002, t_sent: '2026-09-23T10:00:00.000Z', t_received: '2026-09-23T10:00:00.800Z' } };
   return { entry: e, you: { who: 'you', text, kind: 'typed', masked }, bot: [{ who: 'bot', text: 'ค่าส่ง 40 บาทค่ะ', buttons: [], variant: 'plain', response_id: 'shipping' }],
     raw: { request: { state: { customer_said: text, shop_said: 'hi', history: [] }, questions: { intent: {} } }, response: { id: 'gen-'+n } } }; }
 function screen(){ return { you: byId.messages.children.filter(n => n.cls().includes('you')).map(n => [n.getAttribute('data-testid'), n.textContent, n.getAttribute('data-masked')]),
@@ -407,6 +407,30 @@ function screen(){ return { you: byId.messages.children.filter(n => n.cls().incl
             "console.log(JSON.stringify([1, 2].map((n) => [at(n).textContent, at(n).getAttribute('data-value')])));")
         self.assertEqual(out, [["10:00:00.807", "2026-09-23T10:00:00.807Z"],     # t_received, sliced as logged
                                ["10:00:01.042", "2026-09-23T10:00:01.042Z"]])    # no stamps: the entry's `at`
+
+    def test_server_time_round_trip_and_tokens_on_screen(self):  # Story 2.3 AC-4, AC-5
+        out = self.page(
+            "freshPage(); const e = (n, extra) => Object.assign(item(n, 'x').entry, extra);"
+            "const a = e(1, {}); a.jev.jev_ms = 612; a.jev.ms = 1087; a.jev.input_tokens = 1519; a.jev.output_tokens = 12; a.jev.cost_usd = 0.0000638;"
+            "const b = e(2, {}); b.jev.jev_ms = 400; b.jev.input_tokens = 1600;"
+            "const old = e(3, {}); delete old.jev.jev_ms; delete old.jev.input_tokens; delete old.jev.output_tokens;"   # a log from before 2.3
+            "const down = { turn_id: 'd', outcome: 'model_failed', input: { text: 'x' }, jev: { status: 0, error: 'TimeoutError', ms: 5000, jev_ms: 9999, input_tokens: 9999, cost_usd: 0 } };"
+            "S.session.log.push(a, b, old, down); [a, b, old, down].forEach((x, i) => addTurnRow(x, i + 1)); updateKeyInfo();"
+            "const row = (n) => byId.rows.children.find((r) => r.getAttribute('data-testid') === `turn-${n}`);"
+            "const hook = (n, k) => row(n).all().find((x) => x.getAttribute('data-testid') === `turn-${n}-${k}`);"
+            "const firstMs = (n) => row(n).all().find((x) => (x.getAttribute('data-testid') || '').endsWith('-ms')).getAttribute('data-testid');"
+            "S.session.raw = {}; openViewer(1); const back = byId['viewer-back'].textContent;"
+            "console.log(JSON.stringify({ line: row(1).querySelector('.t4').textContent, jev: [1, 3].map((n) => [hook(n, 'jev').textContent, hook(n, 'jev').getAttribute('data-value')]),"
+            " ms: [hook(1, 'ms').textContent, hook(1, 'ms').getAttribute('data-value')], anchor: firstMs(1),"
+            " avg: [byId['avg-ms'].textContent, byId['avg-ms'].getAttribute('data-value')], tok: [byId['avg-tokens'].textContent, byId['avg-tokens'].getAttribute('data-value')], back }));")
+        self.assertTrue(out["line"].startswith("10:00:00.800|server 612 ms|·|round trip 1087 ms|"), out["line"])
+        self.assertEqual(out["jev"], [["server 612 ms", "612"], ["server —", ""]])      # a pre-2.3 entry: no server time
+        self.assertEqual(out["ms"], ["round trip 1087 ms", "1087"])
+        self.assertEqual(out["anchor"], "turn-1-ms")                  # storyboard ch. 2: `[data-testid$="-ms"]` is the round trip
+        self.assertEqual(out["avg"], ["510 ms", "506"])               # (612 + 400) / 2 — the failed and the untimed call left out
+        self.assertEqual(out["tok"], ["1,560", "1559.5"])             # (1519 + 1600) / 2 input tokens
+        self.assertIn("server time|612 ms (OpenRouter)", out["back"])
+        self.assertIn("cost|$0.000064 → ฿0.0022 · tokens 1,519 in / 12 out", out["back"])
 
     def test_run_starts_from_the_address_once(self):  # AC-2
         out = self.page(
@@ -458,7 +482,7 @@ function screen(){ return { you: byId.messages.children.filter(n => n.cls().incl
         self.assertEqual(a["you"], [["you-1", "ค่าส่งเท่าไหร่คะ", "false"], ["you-2", "[delivery details]", "true"], ["you-3", "มีกาแฟอะไรบ้าง", "false"]])
         self.assertEqual(a["bot"], ["bot-run-1-1-1", "bot-run-1-2-1", "bot-run-1-3-1"])
         # the same panel, newest first; the key-info block from the log; the composer ready at the end
-        self.assertEqual((a["rows"], a["turns"], a["log"], a["usd"], a["avg"]), (["turn-3", "turn-2", "turn-1"], "3", 3, "0.000600", "800 ms"))
+        self.assertEqual((a["rows"], a["turns"], a["log"], a["usd"], a["avg"]), (["turn-3", "turn-2", "turn-1"], "3", 3, "0.000600", "500 ms"))   # Story 2.3: AVG is server time
         self.assertEqual((a["composer"], a["input_disabled"], a["status"]), ("ready", False, ""))
         self.assertIn("customer_said|มีกาแฟอะไรบ้าง", out["viewer"])         # `open` on a run row shows its request
 
