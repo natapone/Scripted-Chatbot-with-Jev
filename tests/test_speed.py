@@ -202,5 +202,61 @@ class RunTests(unittest.TestCase):
         self.assertTrue(r2.runs.get(r2.s.session_id).wait(5))
 
 
+class CapAndRecapTests(unittest.TestCase):
+
+    def test_refused_before_its_first_call(self):  # AC-4
+        conn = labelled()
+        r = Rig(self, conn, cap=0.001)
+        started = r.runs.start(r.s.session_id, 100)
+        self.assertEqual((started["refused"], started["outcome"], started["model_status"]), (True, "cap_reached", "cap"))
+        self.assertAlmostEqual(started["estimate_usd"], 100 * speed.EST_TURN_USD)
+        self.assertEqual((conn.log["opened"], len(conn.log["sent"]), r.client.calls), (0, 0, 0))
+        self.assertEqual((r.store.get(r.s.session_id).log, r.runs.get(r.s.session_id)), ([], None))
+        with self.assertRaises(speed.RunError) as e:
+            r.runs.progress(r.s.session_id)
+        self.assertEqual(e.exception.status, 404)
+        # within the room it starts: 1,000 at the estimate fits the default $0.50 cap
+        ok = Rig(self, labelled(), cap=0.50)
+        self.assertFalse(ok.run(1000)[0]["refused"])
+
+    def test_the_cap_reached_mid_run_stops_sending(self):  # AC-4
+        conn = labelled(cost=0.001)
+        r = Rig(self, conn, cap=0.005, concurrency=1)
+        started, run = r.run(20)                          # estimate $0.004: allowed; each answer costs $0.001
+        self.assertFalse(started["refused"])
+        self.assertEqual((run.state, len(conn.log["sent"]), len(run.items)), ("capped", 5, 6))
+        last = run.items[-1]["entry"]
+        self.assertEqual((last["outcome"], last["jev"]["error"], last["turn_no"]), ("cap_reached", "cap", 6))
+        p = r.runs.progress(r.s.session_id)
+        self.assertEqual((p["state"], p["model_status"], p["recap"]["errors"], p["recap"]["calls"]), ("capped", "cap", 1, 6))
+
+    def test_recap_from_the_log_agrees_with_the_key_info_block(self):  # AC-5
+        conn = labelled(fail={CASES[1]["text"]}, cost=0.000163)
+        r = Rig(self, conn)
+        started, run = r.run(140)
+        p = r.runs.progress(r.s.session_id, since=130)
+        self.assertEqual((p["state"], p["answered"], p["next"], len(p["items"]), p["since"]), ("done", 140, 140, 10, 130))
+        rc = p["recap"]
+        log = r.store.get(r.s.session_id).log
+        # the key-info block's rule (shared.js § updateKeyInfo), over the whole log
+        answered = [e for e in log if e.get("jev") and e["outcome"] not in ("model_failed", "cap_reached")]
+        self.assertEqual(rc["avg_ms"], sum(e["jev"]["ms"] for e in answered) / len(answered))
+        self.assertAlmostEqual(rc["total_usd"], sum(e["jev"]["cost_usd"] for e in answered), places=12)
+        self.assertEqual((rc["calls"], rc["target"], rc["concurrency"], rc["answered"], rc["errors"]), (140, 140, 32, 138, 2))
+        self.assertAlmostEqual(rc["total_usd"], 138 * 0.000163, places=12)
+        self.assertAlmostEqual(rc["total_thb"], rc["total_usd"] * 34.9, places=12)
+        self.assertAlmostEqual(rc["cost_per_call_usd"], rc["total_usd"] / 140, places=12)
+        self.assertAlmostEqual(rc["cost_per_call_thb"], rc["total_thb"] / 140, places=12)
+        self.assertEqual(rc["correct"], sum(e["correct"] for e in log))
+        self.assertEqual(rc["correct_share"], rc["correct"] / 140)
+        self.assertGreater(rc["correct"], 120)
+        self.assertEqual(rc["calls_per_s"], 140 / (rc["elapsed_ms"] / 1000))
+        self.assertGreaterEqual(rc["elapsed_ms"], 0)
+        self.assertIsInstance(rc["wall_ms"], int)
+        self.assertEqual((rc["thb_per_usd"], rc["rate_date"], rc["model"]), (34.9, "2026-09-22", "typesafe/jev-1.13"))
+        # the recap from the entries alone (a static function the driver's figures can be re-derived with)
+        self.assertEqual(speed.recap([], thb_per_usd=34.9, rate_date="d", target=0, concurrency=1, wall_ms=0, model="m")["calls"], 0)
+
+
 if __name__ == "__main__":
     unittest.main()

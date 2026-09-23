@@ -33,6 +33,7 @@ CONCURRENCY = 32                  # S-4: 1,000 turns in 12.6 s at 32 in flight
 CALL_TIMEOUT_S = 5.0              # F-9: a slow call frees its slot after this; F-12 saw none past 5 s
 FAIL_STREAK = 32                  # failed calls in a row that end the run (S-3 saw 57 empty in a row)
 MAX_TARGET = 1000                 # FR26: 100 to rehearse, 1,000 to record
+EST_TURN_USD = 0.0002             # S-4 measured $0.000163 a turn; the refusal estimates on the safe side
 FAILED = ("model_failed", "cap_reached")
 
 
@@ -126,6 +127,13 @@ class Runs:
         with self.store.lock(session_id):
             if self.store.get(session_id) is None:
                 raise RunError(404, "unknown or expired session")
+            if self.spend_cap_usd is not None:           # NFR4: refused before its first call
+                estimate = target * EST_TURN_USD
+                room = self.spend_cap_usd - self.client.spent_usd
+                if estimate > room:
+                    return {"refused": True, "outcome": "cap_reached", "model_status": "cap",
+                            "session_id": session_id, "target": target, "estimate_usd": estimate,
+                            "room_usd": max(room, 0.0)}
             with self._lock:
                 current = self._runs.get(session_id)
                 if current is not None and current.state == "running":
@@ -141,6 +149,30 @@ class Runs:
     def get(self, session_id: str) -> Run | None:
         with self._lock:
             return self._runs.get(session_id)
+
+    def progress(self, session_id: str, since: int = 0) -> dict:
+        """The latest run on this session: its counts, the items from `since` on, and — once it has
+        ended — the recap, computed from the session's turn log."""
+        run = self.get(session_id)
+        if run is None:
+            raise RunError(404, "no run on this session")
+        with run._lock:
+            state, items = run.state, list(run.items)
+        since = max(0, since)
+        out = {"run_id": run.run_id, "session_id": session_id, "target": run.target,
+               "concurrency": run.concurrency, "started_at": run.started_at, "state": state,
+               "answered": len(items), "errors": run.errors, "timeouts": run.timeouts, "correct": run.correct,
+               "model_status": "cap" if state == "capped" else "live",
+               "since": since, "next": len(items), "items": items[since:], "recap": None}
+        if state != "running":
+            with self.store.lock(session_id):
+                s = self.store.get(session_id)
+                log = list(s.log) if s is not None else [i["entry"] for i in items]
+            entries = [e for e in log if e.get("batch") == run.run_id]
+            out["recap"] = recap(entries, thb_per_usd=self.thb_per_usd, rate_date=self.rate_date,
+                                 target=run.target, concurrency=run.concurrency, wall_ms=run.wall_ms,
+                                 model=self.flow.model)
+        return out
 
     # --- the run
 
@@ -219,3 +251,35 @@ class Runs:
                     run._stop = run._stop or "cap"
                 elif run._streak >= FAIL_STREAK:
                     run._stop = run._stop or "streak"
+
+
+def recap(entries: list[dict], *, thb_per_usd: float, rate_date: str, target: int, concurrency: int,
+          wall_ms: int | None, model: str) -> dict:
+    """The recap's figures, from a run's log entries — raw, unrounded, for the recording driver.
+    `avg_ms` and `total_usd` follow the key-info block's rule (`shared.js` § `updateKeyInfo`): over
+    entries with a `jev` block that are neither `model_failed` nor `cap_reached`. `elapsed_ms` is the
+    first `t_sent` to the last `t_received` in the log; `wall_ms` is the run's own clock."""
+    calls = len(entries)
+    answered = [e for e in entries if e.get("jev") and e.get("outcome") not in FAILED]
+    ms = [e["jev"].get("ms") or 0 for e in answered]
+    total_usd = sum(e["jev"].get("cost_usd") or 0.0 for e in answered)
+    stamped = [e["jev"] for e in entries if (e.get("jev") or {}).get("t_sent") and e["jev"].get("t_received")]
+    elapsed_ms = None
+    if stamped:
+        first = min(parse_stamp(j["t_sent"]) for j in stamped)
+        last = max(parse_stamp(j["t_received"]) for j in stamped)
+        elapsed_ms = (last - first).total_seconds() * 1000
+    correct = sum(1 for e in entries if e.get("correct"))
+    return {"calls": calls, "target": target, "concurrency": concurrency,
+            "elapsed_ms": elapsed_ms, "wall_ms": wall_ms,
+            "calls_per_s": calls / (elapsed_ms / 1000) if elapsed_ms else None,
+            "avg_ms": sum(ms) / len(ms) if ms else None,
+            "answered": len(answered),
+            "correct": correct, "correct_share": correct / calls if calls else None,
+            "fallbacks": sum(1 for e in entries if e.get("outcome") == "fallback"),
+            "errors": sum(1 for e in entries if e.get("outcome") in FAILED),
+            "timeouts": sum(1 for e in entries if (e.get("jev") or {}).get("error") == "TimeoutError"),
+            "total_usd": total_usd, "total_thb": total_usd * thb_per_usd,
+            "cost_per_call_usd": total_usd / calls if calls else None,
+            "cost_per_call_thb": total_usd * thb_per_usd / calls if calls else None,
+            "thb_per_usd": thb_per_usd, "rate_date": rate_date, "model": model}
