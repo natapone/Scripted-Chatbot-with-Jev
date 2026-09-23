@@ -91,6 +91,7 @@ button { font: inherit; cursor: pointer; }
 .panel .badge { background: rgba(255,255,255,.08); color: var(--panel-ink-2); }
 .badge.live::before { content: "● "; color: var(--figure); }
 .badge.down::before { content: "● "; color: var(--bad); }
+.badge.cap::before { content: "● "; color: var(--warn); }
 .badge.fallback { background: rgba(226,176,74,.2); color: var(--warn); }
 .badge.model-failed { background: rgba(228,107,92,.2); color: var(--bad); }
 /* key-info block — fixed at the bottom of the panel column; three figures, nothing else */

@@ -982,6 +982,84 @@ class OrderTests(unittest.TestCase):
         self.assertEqual(r.state().live_buttons, [])                                      # a miss's bubble is not live
 
 
+class DeliveryByStateTests(unittest.TestCase):
+    """Story 1.5 task 01 — Findings F-8: under the pending `delivery` slot a typed address that Jev
+    fails to classify is the delivery details by state; a failed call or the cap there is a miss
+    whose bubble, log entry and raw request are masked — the text is stored nowhere."""
+
+    def asked(self, *steps, cap=0.50):
+        r = Rig(self, *steps, cap=cap)
+        s = r.s
+        s.pending_prompt = {"slot": "delivery", "context": "ask_delivery", "params": {}, "message_id": "m1"}
+        s.contexts = {"ask_delivery": {"expires_after_turn": 3, "params": {}}}
+        r.store.commit(s)
+        return r
+
+    def by_state(self, answer):
+        r = self.asked((200, answer), (200, reply("faq.shipping_fee", 0.9)))
+        res = r.typed(ADDRESS, "t1")
+        s = r.state()
+        e = res["log_entry"]
+        self.assertEqual((res["outcome"], e["response_id"], e["jev"]["by_state"], e["jev"]["awaiting"]),
+                         ("matched", "give_delivery_details", True, "delivery"))
+        self.assertEqual(s.order["delivery_text"], ADDRESS)                          # exactly as typed
+        self.assertEqual(e["input"], {"kind": "typed", "text": turn.MASK_FOR_LOG})
+        self.assertEqual((res["you"]["masked"], s.transcript[1]["masked"]), (True, True))
+        self.assertNotIn(ADDRESS, blob(s.log, s.last_bot_message["text_for_jev"]))
+        self.assertIsNone(s.pending_prompt if (s.pending_prompt or {}).get("slot") == "delivery" else None)
+        res = r.typed("ค่าส่งเท่าไหร่คะ", "t2")                                     # the next turn: history masked
+        self.assertIn({"who": "customer", "text": turn.MASK_FOR_JEV}, res["raw"]["request"]["state"]["history"])
+        self.assertNotIn(ADDRESS, blob(res["raw"]["request"], r.state().log))
+        return e
+
+    def test_none_under_the_delivery_slot_is_the_details_by_state(self):  # AC-1
+        e = self.by_state(reply("none", 0.93))
+        self.assertEqual((e["jev"]["intent"], e["jev"]["confidence"]), ("none", 0.93))    # Jev's own answer kept
+
+    def test_below_the_threshold_under_the_delivery_slot_is_the_details_by_state(self):  # AC-1
+        e = self.by_state(reply("faq.shipping_fee", 0.31))
+        self.assertEqual(e["jev"]["intent"], "faq.shipping_fee")
+
+    def assert_stored_nowhere(self, r, res, outcome, status):
+        s = r.state()
+        self.assertEqual((res["outcome"], res["model_status"], s.miss_count, s.turn_no), (outcome, status, 1, 0))
+        self.assertEqual((res["you"]["text"], res["you"]["masked"]), (turn.MASK_FOR_LOG, True))
+        self.assertEqual(res["log_entry"]["input"], {"kind": "typed", "text": turn.MASK_FOR_LOG})
+        self.assertEqual(res["raw"]["request"]["state"]["customer_said"], turn.MASK_FOR_JEV)
+        self.assertIsNone(s.order["delivery_text"])
+        self.assertEqual(s.pending_prompt["slot"], "delivery")                     # still asked
+        self.assertNotIn(ADDRESS, blob(res, s.to_snapshot(), s.raw, s.last_response, r.snapshot()))
+        self.assertNotIn("081-000-0000", blob(res, s.to_snapshot(), s.raw, r.snapshot()))
+
+    def test_a_failed_call_under_the_delivery_slot_is_a_masked_miss(self):  # AC-1
+        r = self.asked(ConnectionRefusedError("no"), ConnectionRefusedError("no"))
+        res = r.typed(ADDRESS, "t1")
+        self.assert_stored_nowhere(r, res, "model_failed", "unreachable")
+        self.assertEqual(res["log_entry"]["jev"]["awaiting"], "delivery")
+
+    def test_the_cap_under_the_delivery_slot_is_a_masked_miss(self):  # AC-1
+        r = self.asked(cap=0)
+        res = r.typed(ADDRESS, "t1")
+        self.assert_stored_nowhere(r, res, "cap_reached", "cap")
+        self.assertEqual(r.client.calls, 0)
+
+    def test_the_jev_block_names_the_slot_it_was_sent(self):  # AC-2: the row renders from the log alone
+        r = Rig(self, (200, reply("none", 0.91, quantity="1")), (200, reply("greet", 0.97)))
+        s = r.s
+        s.pending_prompt = {"slot": "quantity", "context": "ask_quantity", "params": {"sku": "DH-001"}, "message_id": "m1"}
+        s.contexts = {"ask_quantity": {"expires_after_turn": 3, "params": {"sku": "DH-001"}}}
+        r.store.commit(s)
+        e = r.typed("1 ถุงค่ะ", "t1")["log_entry"]
+        self.assertEqual((e["jev"]["intent"], e["jev"]["by_state"], e["jev"]["awaiting"]), ("none", True, "quantity"))
+        self.assertEqual(e["applied"][0]["product_from"], "context:ask_quantity")
+        self.assertEqual(r.state().pending_prompt["slot"], "promotion")            # the lead offered the promotion
+        s = r.state()
+        s.pending_prompt = None
+        r.store.commit(s)
+        e = r.typed("สวัสดีค่ะ", "t2")["log_entry"]                                  # nothing awaited: no field
+        self.assertNotIn("awaiting", e["jev"])
+
+
 say = turn.say
 
 

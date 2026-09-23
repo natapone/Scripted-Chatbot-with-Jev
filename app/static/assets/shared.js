@@ -100,14 +100,22 @@ function renderTurn(r, turn_id, wrap = null) {
   if (r.you) { if (r.you.kind === "clicked") pressed(wrap, r.you.text); you(r.you); }
   r.bot.forEach(bot);
   if (r.log_entry) { s.log.push(r.log_entry); if (r.raw) s.raw[turn_id] = r.raw; if (r.log_entry.jev) addTurnRow(r.log_entry, s.log.length); }
-  status(r);
   updateKeyInfo();
 }
-function status(r) {
-  const st = $("#key-status"); if (!st) return;
-  if (r.outcome === "model_failed") st.textContent = `● unreachable · ${r.log_entry?.jev?.error || "no answer"}`;
-  else if (r.outcome === "cap_reached") st.textContent = "● spend cap reached";
-  else if (r.model_status === "live" && r.log_entry?.jev) st.textContent = "";   // the model answered a call — cleared (a click makes none)
+/* The model's status (05_components § KeyInfo, `status: live|down|cap`) is the last typed turn's:
+   a failed call → `down` and *● unreachable · <error>* above the figures; the cap → `cap` and
+   *● spend cap reached*; an answered call → `live`, the line gone. A click makes no call and changes
+   nothing. Read from the log, so a reload restores it as the last logged turn left it. */
+function modelStatus(log) {
+  const e = [...(log || [])].reverse().find((x) => x.jev);
+  if (e?.outcome === "model_failed") return { status: "down", line: `● unreachable · ${e.jev.error || "no answer"}` };
+  if (e?.outcome === "cap_reached") return { status: "cap", line: "● spend cap reached" };
+  return { status: "live", line: "" };
+}
+function showStatus(log) {
+  const m = modelStatus(log); const b = $("#model-status"); const st = $("#key-status");
+  if (b) { b.className = `badge ${m.status}`; b.textContent = m.status; b.setAttribute("data-status", m.status); }
+  if (st) st.textContent = m.line;
 }
 /* The server itself could not be reached, or the session it was asked about is gone: an unknown
    or expired id is "a new session, as if the page had just opened" (session-state.md). */
@@ -132,20 +140,35 @@ async function click(btn, opt) {
 
 /* ---------------- panel ---------------- */
 /* One row per answered message, from the server's log entry. `n` is the entry's place in the log
-   (1-based) — the row's token and what the viewer opens by. */
+   (1-based) — the row's token and what the viewer opens by. Four lines (05_components § TurnRow):
+   `#n · text` / intent + confidence (or FALLBACK / MODEL FAILED) / values with the provenance /
+   ms · ฿ · $ · open. A by-state turn names the intent the bot acted on and the slot it was awaiting;
+   Jev's own answer stays on `data-jev-intent` and in the viewer. */
+const PROV = (src) => src === "jev" ? "from Jev" : src === "focus_sku" ? "from focus" : src.startsWith("context:") ? `from context (${src.slice(8)})` : `from ${src.replace(/_/g, " ")}`;
+function intentLine(e) {
+  const j = e.jev || {};
+  if (e.outcome === "model_failed") return `MODEL FAILED · ${j.error || "no answer"}`;
+  if (e.outcome === "cap_reached") return "SPEND CAP REACHED · no call made";
+  if (e.outcome === "fallback") return `FALLBACK · ${j.intent ?? "—"}`;
+  if (j.by_state) return `${e.response_id || "inform"} · by state${j.awaiting ? ` (awaiting ${j.awaiting})` : ""}`;
+  return j.intent ?? "—";
+}
 function addTurnRow(e, n, animate = true) {
   const rows = $("#rows"); $("#rows .empty")?.remove(); const j = e.jev;
   const row = el("div", { class: animate ? "turn arrived" : "turn", "data-testid": `turn-${n}`, "data-turn-id": e.turn_id || "", "data-outcome": e.outcome, "data-at": e.at || "" });
   row.append(el("div", { class: "t1" }, el("span", { class: "n", text: `#${n}` }), document.createTextNode(e.input.text)));
   const kv = (k, v, c, cls = "") => el("div", { class: `kv ${cls}` }, el("span", { class: "k", text: k }), el("span", { class: "v", text: v }), el("span", { class: "c", text: c || "" }));
-  if (e.outcome === "model_failed") row.append(kv("intent", `MODEL FAILED · ${j?.error || "no answer"}`, "", "intent"));
-  else if (e.outcome === "cap_reached") row.append(kv("intent", "SPEND CAP REACHED · no call made", "", "intent"));
-  else { const iv = kv(e.outcome === "fallback" ? "fallback" : "intent", (j?.intent ?? "—") + (j?.by_state ? "  · by state" : ""), fmt.conf(j?.confidence), "intent"); iv.querySelector(".v").setAttribute("data-testid", `turn-${n}-intent`); iv.querySelector(".c").setAttribute("data-testid", `turn-${n}-confidence`); iv.querySelector(".c").setAttribute("data-value", j?.confidence ?? ""); row.append(iv); }
-  const vals = j && Object.entries(j.entities || {}).map(([k, v]) => `${k} ${v}`).join(" · ");
+  const failed = e.outcome === "model_failed" || e.outcome === "cap_reached";
+  const iv = kv(e.outcome === "fallback" ? "fallback" : "intent", intentLine(e), failed ? "—" : fmt.conf(j?.confidence), "intent");
+  iv.querySelector(".v").setAttribute("data-testid", `turn-${n}-intent`); iv.querySelector(".v").setAttribute("data-jev-intent", j?.intent ?? "");
+  iv.querySelector(".c").setAttribute("data-testid", `turn-${n}-confidence`); iv.querySelector(".c").setAttribute("data-value", failed ? "" : (j?.confidence ?? ""));
+  row.append(iv);
+  const vals = j && Object.entries(j.entities || {}).filter(([, v]) => v !== "not_mentioned").map(([k, v]) => `${k} ${v}`).join(" · ");
   row.append(kv("values", vals || "—", ""));
-  for (const a of e.applied || []) if (a.product_from && a.product_from !== "jev") row.append(el("div", { class: "prov", "data-testid": `turn-${n}-prov-product`, "data-source": a.product_from, text: `product ${a.set.match(/\[(.+?)\]/)?.[1] || a.to || ""}  ← from ${a.product_from}` }));
+  const a = (e.applied || []).find((x) => x.product_from);          // Provenance: where the product came from
+  if (a) row.append(el("div", { class: "prov", "data-testid": `turn-${n}-prov-product`, "data-source": a.product_from, text: `product ${a.set.match(/\[(.+?)\]/)?.[1] || a.to || ""}  ← ${PROV(a.product_from)}` }));
   const t4 = el("div", { class: "t4" });
-  t4.append(el("span", { "data-testid": `turn-${n}-ms`, "data-value": j?.ms ?? 0, text: j ? fmt.ms(j.ms || 0) : "—" }), el("span", { "data-testid": `turn-${n}-baht`, "data-value": j?.cost_usd ?? 0, text: j && j.cost_usd ? fmt.baht(j.cost_usd) : "฿0" }), el("span", { "data-testid": `turn-${n}-usd`, text: j && j.cost_usd ? fmt.usd(j.cost_usd) : "—" }));
+  t4.append(el("span", { "data-testid": `turn-${n}-ms`, "data-value": j?.ms ?? 0, text: j ? fmt.ms(j.ms || 0) : "—" }), el("span", { "data-testid": `turn-${n}-baht`, "data-value": j?.cost_usd ?? 0, text: j && j.cost_usd ? fmt.baht(j.cost_usd) : "฿0" }), el("span", { "data-testid": `turn-${n}-usd`, "data-value": j?.cost_usd ?? 0, text: j && j.cost_usd ? fmt.usd(j.cost_usd) : "—" }));
   t4.append(el("button", { class: "open", "data-testid": `turn-${n}-open`, text: "open", onclick: () => openViewer(n) }));
   row.append(t4); rows.prepend(row);
 }
@@ -156,23 +179,53 @@ function updateKeyInfo() {
   const turns = s?.log?.length ?? 0;   // every committed message — typed, clicked or missed — as the rows are numbered
   set("#avg-ms", avg == null ? "—" : fmt.ms10(avg), avg ?? 0); set("#total-baht", fmt.baht(usd, 3), usd); set("#total-turns", String(turns), turns);
   $("#key-info").setAttribute("data-total-usd", usd.toFixed(6));
+  showStatus(s?.log);
+  fitViewer();
 }
 function set(sel, text, value) { const n = $(sel); if (!n) return; n.textContent = text; n.setAttribute("data-value", value); n.classList.remove("bump"); void n.offsetWidth; n.classList.add("bump"); }
-/* The viewer opens the n-th log entry; its raw bodies are looked up by the entry's turn_id and
-   are only there while the server has held them in memory (empty after a restart). */
+/* The viewer opens the n-th log entry (05_components § TurnViewer): What was sent · What came back ·
+   What the bot did — in that order, always — then the raw bodies, collapsed. The raw request and
+   response are looked up by the entry's turn_id and are only there while the server holds them in
+   memory; after a restart the raw blocks say so and the rest still shows, from the log alone. */
+const NOT_IN_MEMORY = "— not in memory";
 function openViewer(n) {
   const s = S.session; const e = s.log[n - 1]; if (!e) return; const raw = s.raw[e.turn_id] || {}; const v = $("#viewer");
+  const j = e.jev || {}; const st = raw.request?.state; const held = raw.request !== undefined;
   $("#viewer-title").textContent = `Turn #${n} · ${e.input.text}`;
-  const dl = (pairs) => { const d = el("dl"); pairs.forEach(([k, val]) => d.append(el("dt", { text: k }), el("dd", { text: val }))); return d; };
-  const pre = (x) => (x === undefined ? "— not in memory" : JSON.stringify(x, null, 1));
-  $("#viewer-sent").replaceChildren(dl([["shop_said", raw.request?.state?.shop_said || "—"], ["customer_said", e.input.text], ["contexts", (e.contexts_before || []).join(", ") || "none"], ["intents in scope", String(e.intents_in_scope || "—")], ["entity questions", "product · quantity · brew · roast · payment"]]), el("details", {}, el("summary", { text: "raw request" }), el("pre", { "data-testid": "viewer-raw-request", text: pre(raw.request) })));
-  const j = e.jev || {};
+  const dl = (pairs) => { const d = el("dl"); pairs.forEach(([k, val]) => d.append(el("dt", { text: k }), val instanceof Node ? val : el("dd", { text: val }))); return d; };
+  const lines = (xs) => el("dd", {}, ...xs.map((x) => el("div", { text: x })));
+  // What was sent — the request as Jev received it; the customer's text as the log keeps it
+  $("#viewer-sent").replaceChildren(dl([
+    ["shop_said", st ? st.shop_said : NOT_IN_MEMORY],
+    ["customer_said", st ? st.customer_said : e.input.text],
+    ["awaiting", (st ? st.awaiting : j.awaiting) || "none"],
+    ["history", st ? ((st.history || []).length ? lines(st.history.map((h) => `${h.who}: ${h.text}`)) : "none") : NOT_IN_MEMORY],
+    ["contexts", (e.contexts_before || []).join(", ") || "none"],
+    ["intents in scope", String(e.intents_in_scope ?? "—")],
+  ]));
+  // What came back — the answer, its clock and its cost
+  const probs = Object.entries(raw.response?.answers?.intent?.probabilities || {}).sort((a, b) => b[1] - a[1]).slice(0, 3);
   const wall = j.t_sent && j.t_received ? Date.parse(j.t_received) - Date.parse(j.t_sent) : null;
-  $("#viewer-back").replaceChildren(dl([["intent", j.intent ? `${j.intent} ${fmt.conf(j.confidence)}` : "—"], ...Object.entries(j.entities || {}).map(([k, val]) => [k, val]), ["cost", j.cost_usd ? `${fmt.usd(j.cost_usd)} → ${fmt.baht(j.cost_usd)}` : "—"], ["latency · status", `${j.ms ?? "—"} ms · ${j.status ?? "—"}`], ["t_sent → t_received", j.t_sent ? `${j.t_sent.slice(11, 23)} → ${(j.t_received || "").slice(11, 23)} (${wall} ms wall)` : "—"], ["received at", e.at || "—"]]), el("details", {}, el("summary", { text: "raw response" }), el("pre", { "data-testid": "viewer-raw-response", text: pre(raw.response) })));
-  $("#viewer-applied").replaceChildren(dl((e.applied || []).length ? e.applied.map((a) => [a.set, `${a.to ?? ""}${a.product_from ? `  (product from ${a.product_from})` : ""}`]) : [["—", "nothing written"]]));
-  v.style.bottom = `${$("#key-info").offsetHeight}px`;  // the drawer stops above the key-info block — never covers it
+  $("#viewer-back").replaceChildren(dl([
+    ["intent", j.intent ? `${j.intent} ${fmt.conf(j.confidence)}${j.by_state ? ` · by state → ${e.response_id}` : ""}` : "—"],
+    ["top probabilities", probs.length ? probs.map(([k, p]) => `${k} ${fmt.conf(p)}`).join(" · ") : (held ? "—" : NOT_IN_MEMORY)],
+    ...Object.entries(j.entities || {}).map(([k, val]) => [k, val]),
+    ["status", `${j.status ?? "—"}${j.error ? ` · ${j.error}` : ""}`],
+    ["t_sent → t_received", j.t_sent ? `${j.t_sent.slice(11, 23)} → ${(j.t_received || "").slice(11, 23)} = ${wall} ms` : "—"],
+    ["cost", j.cost_usd ? `${fmt.usd(j.cost_usd)} → ${fmt.baht(j.cost_usd)}` : "—"],
+    ["request_id", j.request_id || "—"],
+  ]));
+  // What the bot did — each write, and where its product came from
+  $("#viewer-applied").replaceChildren(dl((e.applied || []).length ? e.applied.map((a) => [a.set, `${a.to ?? "—"}${a.product_from ? `  ← ${PROV(a.product_from)}` : ""}`]) : [["—", `nothing written · ${e.response_id || ""}`]]));
+  const pre = (x) => (x === undefined ? NOT_IN_MEMORY : JSON.stringify(x, null, 1));
+  $("#viewer-raw-request").textContent = pre(raw.request); $("#viewer-raw-response").textContent = pre(raw.response);
+  v.querySelectorAll("details").forEach((d) => d.removeAttribute("open"));
+  fitViewer();
+  document.querySelectorAll(".turn[data-open]").forEach((r) => r.removeAttribute("data-open"));
   v.style.display = "block"; setTimeout(() => v.setAttribute("data-open", "true"), 20); document.querySelector(`[data-testid="turn-${n}"]`)?.setAttribute("data-open", "true");
 }
+/* The drawer stops above the key-info block — never covers it, whatever height the status line gives it. */
+function fitViewer() { const v = $("#viewer"); if (v) v.style.bottom = `${$("#key-info").offsetHeight}px`; }
 function closeViewer() { const v = $("#viewer"); v.setAttribute("data-open", "false"); setTimeout(() => { if (v.getAttribute("data-open") === "false") v.style.display = "none"; }, 220); document.querySelectorAll(".turn[data-open]").forEach((r) => r.removeAttribute("data-open")); }
 
 /* ---------------- composer, start over, boot ---------------- */
@@ -216,8 +269,9 @@ async function loadConfig() {
 async function boot(opts = {}) {
   const cfg = await loadConfig();
   if (cfg) { CFG.rate = cfg.rate; CFG.model = cfg.model; const m = $("#model-id"); if (m && cfg.model) m.textContent = cfg.model.split("/").pop(); }
-  $("#rate").textContent = cfg ? `฿${CFG.rate.thb_per_usd}/$ (${CFG.rate.date.slice(5)})` : "rate —";
-  $("#rate").setAttribute("data-source", CFG.rate.source || "none");
+  $("#rate").textContent = cfg ? `฿${CFG.rate.thb_per_usd}/$` : "rate —";
+  $("#rate").setAttribute("data-source", CFG.rate.source || "none"); $("#rate").setAttribute("data-value", cfg ? CFG.rate.thb_per_usd : "");
+  $("#rate-date").textContent = cfg ? CFG.rate.date : "—"; $("#rate-date").setAttribute("data-value", cfg ? CFG.rate.date : "");
   $("#composer input")?.addEventListener("keydown", (ev) => { if (ev.key === "Enter" && !ev.shiftKey) { ev.preventDefault(); const i = ev.target; const t = i.value; i.value = ""; send(t); } });
   $("#send")?.addEventListener("click", () => { const i = $("#composer input"); const t = i.value; i.value = ""; send(t); });
   $("#start-over").addEventListener("click", startOver);
