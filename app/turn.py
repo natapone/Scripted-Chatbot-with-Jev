@@ -21,6 +21,7 @@ HISTORY_TURNS = 4
 MASK_FOR_JEV = "[รายละเอียดจัดส่ง]"              # what Jev sees instead of the delivery details
 MASK_FOR_LOG = "[delivery details]"              # what the log stores for the give_delivery_details turn
 NOT_MENTIONED = "not_mentioned"
+DELIVERY_SLOT = "delivery"                       # the pending slot `ask_delivery` sets; it has no entity
 
 
 # --- masking
@@ -112,6 +113,10 @@ def classify(session: Session, text: str, flow: Flow, client: jev.Client, *,
         confident = (answer.confidence or 0.0) >= THRESHOLD
         if answer.intent in in_scope and confident:
             v.outcome, v.intent = "matched", answer.intent
+        elif slot == DELIVERY_SLOT:
+            # F-8 (Story 1.5): the customer was asked for the delivery details and Jev matched nothing
+            # else — the typed text is those details, by state (the slot has no entity to fill)
+            v.outcome, v.intent, v.by_state = "matched", "give_delivery_details", True
     if v.outcome == "matched":
         v.sku, v.product_from = resolve_product(session, entities)
     return v
@@ -778,6 +783,12 @@ def _typed(store: Store, flow: Flow, client: jev.Client, s: Session, turn_id: st
     masked = v.intent == "give_delivery_details"
     you = you_bubble(text, "typed", masked)
     if v.outcome != "matched":
+        if (s.pending_prompt or {}).get("slot") == DELIVERY_SLOT:
+            # F-8: a failed call or the cap under the delivery slot — the text was the details; it is
+            # stored nowhere: not the bubble, not the log, not the raw request kept for the viewer
+            you = you_bubble(MASK_FOR_LOG, "typed", True)
+            request = dict(v.request, state=dict(v.request.get("state") or {}, customer_said=MASK_FOR_JEV))
+            raw = dict(raw, request=request)
         return _miss(store, flow, s, turn_id, at, you, v, raw)
     if v.intent == "start_over":
         return _start_over(store, flow, s, turn_id, at, you, verdict=v, kind="typed", raw=raw)
@@ -843,7 +854,7 @@ def _start_over(store: Store, flow: Flow, s: Session, turn_id: str, at: str, you
 
 # --- the log entry (contract § The turn log)
 
-def jev_block(answer: jev.JevAnswer, by_state: bool = False) -> dict:
+def jev_block(answer: jev.JevAnswer, by_state: bool = False, awaiting: str | None = None) -> dict:
     block = {"status": answer.status, "intent": answer.intent, "confidence": answer.confidence,
              "entities": dict(answer.entities), "t_sent": answer.t_sent, "t_received": answer.t_received,
              "ms": answer.ms, "cost_usd": answer.cost_usd, "request_id": answer.request_id}
@@ -851,6 +862,8 @@ def jev_block(answer: jev.JevAnswer, by_state: bool = False) -> dict:
         block["error"] = answer.error
     if by_state:
         block["by_state"] = True
+    if awaiting:
+        block["awaiting"] = awaiting          # Story 1.5: the slot sent, so a row renders from the log alone
     return block
 
 
@@ -864,7 +877,7 @@ def log_entry(session: Session, flow: Flow, *, turn_no: int, turn_id: str, at: s
              "contexts_before": session.live_contexts(),
              "intents_in_scope": len(flow.in_scope(session.live_contexts())) + 1}
     if verdict is not None and verdict.answer is not None:
-        entry["jev"] = jev_block(verdict.answer, verdict.by_state)
+        entry["jev"] = jev_block(verdict.answer, verdict.by_state, (verdict.request.get("state") or {}).get("awaiting"))
     elif verdict is not None and verdict.outcome == "cap_reached":
         entry["jev"] = {"status": 0, "error": "cap", "ms": 0, "cost_usd": 0.0}
     entry["outcome"] = outcome
