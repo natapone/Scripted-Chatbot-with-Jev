@@ -84,11 +84,11 @@ class StaticTests(unittest.TestCase):
     TOKENS = {
         "index.html": ("chat", "messages", "composer", "send", "start-over", "panel", "key-info", "avg-ms",
                        "total-baht", "total-turns", "viewer", "viewer-close", "viewer-sent", "viewer-back",
-                       "viewer-applied", "rate", "rate-date", "model-status", "band-top", "band-bottom"),
+                       "viewer-applied", "rate", "rate-date", "model-status", "band-top", "band-bottom",
+                       "viewer-raw-request", "viewer-raw-response"),              # Story 1.5: the page's own <details>
         "shared.js": ("bot-${id}", "you-${youCount}", "opt-${i + 1}", "badge-clicked", "turn-${n}", "turn-${n}-intent",
                       "turn-${n}-confidence", "turn-${n}-ms", "turn-${n}-baht", "turn-${n}-usd", "turn-${n}-open",
                       "turn-${n}-prov-product",                              # Story 1.5: F-1, now named by the design
-                      "viewer-raw-request", "viewer-raw-response",
                       "readback", "readback-total"),                       # Story 1.4: the ReadBack component, from server data
         "speed.js": ("speed-test-open", "speed-pop", "speed-chooser", "speed-target-100", "speed-target-1000",
                      "speed-start", "speed-test", "speed-count", "speed-target", "speed-elapsed-ms", "speed-per-s",
@@ -231,6 +231,63 @@ class StaticTests(unittest.TestCase):
                                         "SPEND CAP REACHED · no call made"])
         self.assertEqual(out["prov"], ["from Jev", "from context (ask_quantity)", "from focus",
                                        "from context (offer_product)", "from options shown"])
+
+    # A DOM just big enough for the panel's functions: elements by id, text, attributes, children.
+    FAKE_DOM = r"""
+class N { constructor(tag){ this.tag=tag; this.kids=[]; this.attrs={}; this.style={}; this.own=''; this.offsetHeight=96; this.classList={add(){},remove(){}}; }
+  get textContent(){ return this.own + this.kids.map(k=>k.textContent).join('|'); } set textContent(t){ this.own=String(t); this.kids=[]; }
+  setAttribute(k,v){ this.attrs[k]=String(v); } getAttribute(k){ return this.attrs[k] ?? null; } removeAttribute(k){ delete this.attrs[k]; }
+  append(...xs){ for (const x of xs) this.kids.push(typeof x==='string'? Object.assign(new N('#text'),{own:x}) : x); }
+  replaceChildren(...xs){ this.kids=[]; this.append(...xs); } prepend(x){ this.kids.unshift(x); } remove(){}
+  addEventListener(){} querySelectorAll(){ return []; } querySelector(){ return null; } }
+const byId = {}; for (const id of ['viewer','viewer-title','viewer-sent','viewer-back','viewer-applied','viewer-raw-request','viewer-raw-response','key-info']) byId[id]=new N('div');
+var document = { createElement: (t)=>new N(t), createTextNode: (t)=>Object.assign(new N('#text'),{own:t}),
+  querySelector: (sel)=> sel.startsWith('#') ? byId[sel.slice(1)] ?? null : null, querySelectorAll: ()=>[] };
+var Node = N; var setTimeout = (f)=>f();
+"""
+
+    def test_viewer_shows_the_three_sections_and_the_raw(self):  # AC-3; walk 1.11
+        entry = {"turn_no": 7, "turn_id": "t7", "at": "2026-09-22T06:48:10.412Z", "input": {"kind": "typed", "text": "1 ถุงค่ะ"},
+                 "contexts_before": ["ask_quantity"], "intents_in_scope": 23, "outcome": "matched", "response_id": "inform",
+                 "jev": {"status": 200, "intent": "none", "confidence": 0.91, "by_state": True, "awaiting": "quantity",
+                         "entities": {"product": "not_mentioned", "quantity": "1", "brew": "not_mentioned", "roast": "not_mentioned", "payment": "not_mentioned"},
+                         "t_sent": "2026-09-22T06:48:10.418Z", "t_received": "2026-09-22T06:48:10.756Z", "ms": 338, "cost_usd": 0.000164, "request_id": "gen-dec-1"},
+                 "applied": [{"set": "lines[DH-001].qty", "to": 1, "product_from": "context:ask_quantity"}]}
+        raw = {"request": {"model": "typesafe/jev-1.13", "state": {"shop_said": "รับกี่ถุงดีคะ?", "customer_said": "1 ถุงค่ะ", "awaiting": "quantity",
+                                                                    "history": [{"who": "bot", "text": "สวัสดีค่ะ"}, {"who": "customer", "text": "ตัวแรกค่ะ"}]}},
+               "response": {"id": "gen-dec-1", "answers": {"intent": {"choice": "none", "confidence": 0.91,
+                                                                   "probabilities": {"none": 0.91, "inform": 0.05, "affirm": 0.03, "greet": 0.01}}}}}
+        script = self.FAKE_DOM + (
+            "CFG.rate.thb_per_usd = 34.9; const out = {};"
+            f"S.session = {{ id: 's', log: [{json.dumps(entry)}], raw: {{ t7: {json.dumps(raw)} }} }};"
+            "openViewer(1); for (const k of ['viewer-sent','viewer-back','viewer-applied','viewer-raw-request','viewer-raw-response']) out[k] = document.querySelector('#'+k).textContent;"
+            "out.bottom = document.querySelector('#viewer').style.bottom; out.open = document.querySelector('#viewer').getAttribute('data-open');"
+            "S.session.raw = {}; openViewer(1); out.after = {}; for (const k of ['viewer-sent','viewer-back','viewer-raw-request','viewer-raw-response']) out.after[k] = document.querySelector('#'+k).textContent;"
+            "console.log(JSON.stringify(out));")
+        out = self.node(script)
+        sent, back, applied = out["viewer-sent"], out["viewer-back"], out["viewer-applied"]
+        for field in ("shop_said|รับกี่ถุงดีคะ?", "customer_said|1 ถุงค่ะ", "awaiting|quantity", "history|bot: สวัสดีค่ะ|customer: ตัวแรกค่ะ",
+                      "contexts|ask_quantity", "intents in scope|23"):
+            self.assertIn(field, sent)
+        self.assertLess(sent.index("shop_said"), sent.index("customer_said"))
+        self.assertLess(sent.index("customer_said"), sent.index("awaiting"))
+        self.assertLess(sent.index("awaiting"), sent.index("history"))
+        for field in ("intent|none 0.91 · by state → inform", "top probabilities|none 0.91 · inform 0.05 · affirm 0.03", "quantity|1",
+                      "status|200", "t_sent → t_received|06:48:10.418 → 06:48:10.756 = 338 ms", "cost|$0.000164 → ฿0.0057", "request_id|gen-dec-1"):
+            self.assertIn(field, back)
+        self.assertIn("lines[DH-001].qty|1  ← from context (ask_quantity)", applied)
+        self.assertIn('"customer_said": "1 ถุงค่ะ"', out["viewer-raw-request"])
+        self.assertIn('"probabilities"', out["viewer-raw-response"])
+        self.assertEqual((out["bottom"], out["open"]), ("96px", "true"))            # stops above key-info
+        # after a restart: the raw is gone; the raw blocks say so and the rest shows from the log
+        after = out["after"]
+        self.assertEqual((after["viewer-raw-request"], after["viewer-raw-response"]), ("— not in memory", "— not in memory"))
+        self.assertIn("customer_said|1 ถุงค่ะ", after["viewer-sent"])
+        self.assertIn("awaiting|quantity", after["viewer-sent"])                     # from the log's jev block
+        self.assertIn("shop_said|— not in memory", after["viewer-sent"])
+        self.assertIn("t_sent → t_received|06:48:10.418 → 06:48:10.756 = 338 ms", after["viewer-back"])
+        js = self.get("/assets/shared.js")[1]
+        self.assertIn('if (ev.key === "Escape") closeViewer()', js)                  # Escape closes
 
     def test_speed_test_mounted_but_not_wired(self):
         status, js = self.get("/assets/speed.js")

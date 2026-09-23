@@ -171,23 +171,52 @@ function updateKeyInfo() {
   const turns = s?.log?.length ?? 0;   // every committed message — typed, clicked or missed — as the rows are numbered
   set("#avg-ms", avg == null ? "—" : fmt.ms10(avg), avg ?? 0); set("#total-baht", fmt.baht(usd, 3), usd); set("#total-turns", String(turns), turns);
   $("#key-info").setAttribute("data-total-usd", usd.toFixed(6));
+  fitViewer();
 }
 function set(sel, text, value) { const n = $(sel); if (!n) return; n.textContent = text; n.setAttribute("data-value", value); n.classList.remove("bump"); void n.offsetWidth; n.classList.add("bump"); }
-/* The viewer opens the n-th log entry; its raw bodies are looked up by the entry's turn_id and
-   are only there while the server has held them in memory (empty after a restart). */
+/* The viewer opens the n-th log entry (05_components § TurnViewer): What was sent · What came back ·
+   What the bot did — in that order, always — then the raw bodies, collapsed. The raw request and
+   response are looked up by the entry's turn_id and are only there while the server holds them in
+   memory; after a restart the raw blocks say so and the rest still shows, from the log alone. */
+const NOT_IN_MEMORY = "— not in memory";
 function openViewer(n) {
   const s = S.session; const e = s.log[n - 1]; if (!e) return; const raw = s.raw[e.turn_id] || {}; const v = $("#viewer");
+  const j = e.jev || {}; const st = raw.request?.state; const held = raw.request !== undefined;
   $("#viewer-title").textContent = `Turn #${n} · ${e.input.text}`;
-  const dl = (pairs) => { const d = el("dl"); pairs.forEach(([k, val]) => d.append(el("dt", { text: k }), el("dd", { text: val }))); return d; };
-  const pre = (x) => (x === undefined ? "— not in memory" : JSON.stringify(x, null, 1));
-  $("#viewer-sent").replaceChildren(dl([["shop_said", raw.request?.state?.shop_said || "—"], ["customer_said", e.input.text], ["contexts", (e.contexts_before || []).join(", ") || "none"], ["intents in scope", String(e.intents_in_scope || "—")], ["entity questions", "product · quantity · brew · roast · payment"]]), el("details", {}, el("summary", { text: "raw request" }), el("pre", { "data-testid": "viewer-raw-request", text: pre(raw.request) })));
-  const j = e.jev || {};
+  const dl = (pairs) => { const d = el("dl"); pairs.forEach(([k, val]) => d.append(el("dt", { text: k }), val instanceof Node ? val : el("dd", { text: val }))); return d; };
+  const lines = (xs) => el("dd", {}, ...xs.map((x) => el("div", { text: x })));
+  // What was sent — the request as Jev received it; the customer's text as the log keeps it
+  $("#viewer-sent").replaceChildren(dl([
+    ["shop_said", st ? st.shop_said : NOT_IN_MEMORY],
+    ["customer_said", st ? st.customer_said : e.input.text],
+    ["awaiting", (st ? st.awaiting : j.awaiting) || "none"],
+    ["history", st ? ((st.history || []).length ? lines(st.history.map((h) => `${h.who}: ${h.text}`)) : "none") : NOT_IN_MEMORY],
+    ["contexts", (e.contexts_before || []).join(", ") || "none"],
+    ["intents in scope", String(e.intents_in_scope ?? "—")],
+  ]));
+  // What came back — the answer, its clock and its cost
+  const probs = Object.entries(raw.response?.answers?.intent?.probabilities || {}).sort((a, b) => b[1] - a[1]).slice(0, 3);
   const wall = j.t_sent && j.t_received ? Date.parse(j.t_received) - Date.parse(j.t_sent) : null;
-  $("#viewer-back").replaceChildren(dl([["intent", j.intent ? `${j.intent} ${fmt.conf(j.confidence)}` : "—"], ...Object.entries(j.entities || {}).map(([k, val]) => [k, val]), ["cost", j.cost_usd ? `${fmt.usd(j.cost_usd)} → ${fmt.baht(j.cost_usd)}` : "—"], ["latency · status", `${j.ms ?? "—"} ms · ${j.status ?? "—"}`], ["t_sent → t_received", j.t_sent ? `${j.t_sent.slice(11, 23)} → ${(j.t_received || "").slice(11, 23)} (${wall} ms wall)` : "—"], ["received at", e.at || "—"]]), el("details", {}, el("summary", { text: "raw response" }), el("pre", { "data-testid": "viewer-raw-response", text: pre(raw.response) })));
-  $("#viewer-applied").replaceChildren(dl((e.applied || []).length ? e.applied.map((a) => [a.set, `${a.to ?? ""}${a.product_from ? `  (product from ${a.product_from})` : ""}`]) : [["—", "nothing written"]]));
-  v.style.bottom = `${$("#key-info").offsetHeight}px`;  // the drawer stops above the key-info block — never covers it
+  $("#viewer-back").replaceChildren(dl([
+    ["intent", j.intent ? `${j.intent} ${fmt.conf(j.confidence)}${j.by_state ? ` · by state → ${e.response_id}` : ""}` : "—"],
+    ["top probabilities", probs.length ? probs.map(([k, p]) => `${k} ${fmt.conf(p)}`).join(" · ") : (held ? "—" : NOT_IN_MEMORY)],
+    ...Object.entries(j.entities || {}).map(([k, val]) => [k, val]),
+    ["status", `${j.status ?? "—"}${j.error ? ` · ${j.error}` : ""}`],
+    ["t_sent → t_received", j.t_sent ? `${j.t_sent.slice(11, 23)} → ${(j.t_received || "").slice(11, 23)} = ${wall} ms` : "—"],
+    ["cost", j.cost_usd ? `${fmt.usd(j.cost_usd)} → ${fmt.baht(j.cost_usd)}` : "—"],
+    ["request_id", j.request_id || "—"],
+  ]));
+  // What the bot did — each write, and where its product came from
+  $("#viewer-applied").replaceChildren(dl((e.applied || []).length ? e.applied.map((a) => [a.set, `${a.to ?? "—"}${a.product_from ? `  ← ${PROV(a.product_from)}` : ""}`]) : [["—", `nothing written · ${e.response_id || ""}`]]));
+  const pre = (x) => (x === undefined ? NOT_IN_MEMORY : JSON.stringify(x, null, 1));
+  $("#viewer-raw-request").textContent = pre(raw.request); $("#viewer-raw-response").textContent = pre(raw.response);
+  v.querySelectorAll("details").forEach((d) => d.removeAttribute("open"));
+  fitViewer();
+  document.querySelectorAll(".turn[data-open]").forEach((r) => r.removeAttribute("data-open"));
   v.style.display = "block"; setTimeout(() => v.setAttribute("data-open", "true"), 20); document.querySelector(`[data-testid="turn-${n}"]`)?.setAttribute("data-open", "true");
 }
+/* The drawer stops above the key-info block — never covers it, whatever height the status line gives it. */
+function fitViewer() { const v = $("#viewer"); if (v) v.style.bottom = `${$("#key-info").offsetHeight}px`; }
 function closeViewer() { const v = $("#viewer"); v.setAttribute("data-open", "false"); setTimeout(() => { if (v.getAttribute("data-open") === "false") v.style.display = "none"; }, 220); document.querySelectorAll(".turn[data-open]").forEach((r) => r.removeAttribute("data-open")); }
 
 /* ---------------- composer, start over, boot ---------------- */
