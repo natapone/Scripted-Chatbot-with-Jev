@@ -66,9 +66,13 @@ const SESSION_OF = (n: number) => (n <= 3 ? 1 : 2);   // storyboard § 5–6: ch
 /** Where each callout fires: after the step whose result it points at (storyboard §§ 5–7). A callout
  *  with no cue fires after the chapter's last step. The wording stays in the storyboard. */
 const CUES: Record<number, string[]> = { 1: ['1.4'], 2: ['2.4', '2.5'], 3: ['3.4'], 4: ['4.2', '4.2'], 5: ['5.1'] };
-/** The pace (storyboard § 4: "a short hold after each Jev answer so the row can be read"), in ms.
- *  About 6 s after each Jev answer; the rest scaled so session 1 runs about 140–160 s. */
-const HOLD = { jev: 6000, click: 4000, callout: 8000, chapterEnd: 6000 };
+/** The pace (storyboard § 4: "a short hold after each Jev answer so the row can be read"), in ms,
+ *  per session. Session 1 is a quarter shorter than the first recording (owner: "reduce idle time
+ *  ~25%"): 4.5 s after each Jev answer. Session 2 keeps the first recording's pace. */
+const HOLDS: Record<number, { jev: number; click: number; callout: number; chapterEnd: number }> = {
+  1: { jev: 4500, click: 3000, callout: 6000, chapterEnd: 4500 },
+  2: { jev: 6000, click: 4000, callout: 8000, chapterEnd: 6000 },
+};
 /** The cards' type. Single quotes inside: it goes into double-quoted style attributes. A `font`
  *  shorthand whose family is `inherit` is invalid and silently dropped (the cards drew at 16 px). */
 const CARD_FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, system-ui, sans-serif";
@@ -155,6 +159,7 @@ async function runSession(n: 1 | 2) {
   const dir = path.join(OUT, `session-${n}`);
   fs.rmSync(dir, { recursive: true, force: true });
   fs.mkdirSync(dir, { recursive: true });
+  const HOLD = HOLDS[n];
   const assertions: Assertion[] = [];
   const legibility: any[] = [];
   const pathRows: any[] = [];
@@ -235,7 +240,7 @@ async function runSession(n: 1 | 2) {
 
   async function recapCard() {
     const figs = recapFigures(recap);
-    const heading = sizeWords('A thousand calls, read from the run', recap.calls);
+    const heading = sizeWords('A thousand messages, read from the run', recap.calls);
     if (!STAGE_ON) return;
     await drawRecapCard(page, figs, heading);
     await stage.pause(1200);
@@ -269,6 +274,18 @@ async function runSession(n: 1 | 2) {
     const side = keyInfo ? 'top' : 'left';
     const beside = keyInfo ? '[data-testid="key-info"]' : row;
     await stage.callout(c.anchor, sizeWords(c.text, RUN_SIZE), { side, beside, poster: first, holdMs: HOLD.callout });
+  }
+
+  /** The delivery details are typed, as a customer types them (F-30): the panel row carries the
+   *  log's mask, and the read-back shows the customer their own text. */
+  async function checkDelivery(id: string, typed: string, liveAtAsk: number) {
+    const seen = await page.evaluate(() => ({
+      row: document.querySelector('[data-testid="panel"] .turn:first-child .t1')?.textContent || '',
+      readback: [...document.querySelectorAll('[data-testid^="bot-"]')].filter((b) => b.querySelector('[data-testid="readback"]')).at(-1)?.textContent || '',
+    }));
+    assertions.push({ ok: liveAtAsk === 0, what: `step ${id}: the delivery question offered no button — the details are typed`, value: liveAtAsk });
+    assertions.push({ ok: seen.row.includes('[delivery details]') && !seen.row.includes(typed), what: `step ${id}: the panel row reads [delivery details], not the typed text`, value: seen.row });
+    assertions.push({ ok: seen.readback.includes(typed), what: `step ${id}: the read-back shows the typed details`, value: seen.readback.slice(0, 200) });
   }
 
   async function checkLegible(where: string) {
@@ -311,7 +328,10 @@ async function runSession(n: 1 | 2) {
           await turn(() => stage.humanClick(b), st.id, `click ${d.label}`);
         } else if (d.kind === 'type') {
           const input = page.locator('#composer input');
+          const asked = await page.evaluate(() => ({ text: [...document.querySelectorAll('[data-testid^="bot-"]')].at(-1)?.textContent || '',
+                                                     live: document.querySelectorAll('button.opt[data-live="true"]').length }));
           await turn(async () => { await stage.humanType(input, d.text); await stage.humanClick(page.locator('#send')); }, st.id, `type ${d.text}`);
+          if (/ที่อยู่/.test(asked.text) && /เบอร์โทร/.test(asked.text)) await checkDelivery(st.id, d.text, asked.live);
         } else if (d.kind === 'open-row') {
           await stage.humanClick(page.locator('[data-testid="panel"] .turn:first-child [data-testid$="-open"]'));
           await page.waitForSelector('[data-testid="viewer"][data-open="true"]', { timeout: 10_000 });
@@ -499,7 +519,7 @@ async function cards() {
   const url = fs.existsSync(bg) ? `data:image/png;base64,${fs.readFileSync(bg).toString('base64')}` : '';
   await page.setContent(`<body style="margin:0;width:${W}px;height:${H}px;background:#f5f1ea ${url ? `url(${url})` : ''} no-repeat">` +
                         '<div id="stage-root" style="position:fixed;inset:0"></div></body>');
-  await drawRecapCard(page, recapFigures(recap), sizeWords('A thousand calls, read from the run', recap.calls));
+  await drawRecapCard(page, recapFigures(recap), sizeWords('A thousand messages, read from the run', recap.calls));
   await page.waitForTimeout(800);
   await page.screenshot({ path: path.join(out, 'recap-card.png') });
   await drawEndCard(page);
