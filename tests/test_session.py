@@ -23,6 +23,16 @@ CONTRACT_VARIABLES = {
     # § The order form (nested as § A snapshot writes it) and the turn log
     "order", "log",
 }
+def tree(root: Path) -> dict:
+    """Every file under `root` with its size and mtime — `{}` when `root` does not exist. The guard
+    that the suite wrote nothing under the repo's `var/`: compare this before and after, because a
+    real run (the cold start, a walk) leaves `var/` behind and that is not the suite's doing (F-14)."""
+    if not root.exists():
+        return {}
+    return {str(p.relative_to(root)): (p.stat().st_size, p.stat().st_mtime_ns)
+            for p in root.rglob("*") if p.is_file()}
+
+
 ORDER_FORM = {"lines", "promo_applied", "payment", "delivery_text", "recommend", "order_code", "confirmed_at"}
 
 
@@ -78,6 +88,7 @@ class StoreTests(unittest.TestCase):
         self.addCleanup(self.tmp.cleanup)
         self.var = Path(self.tmp.name) / "var"
         self.clock = Clock()
+        self.repo_var = tree(ROOT / "var")
 
     def store(self, ttl=1800, version="a3f9c1"):
         return session.Store(version, self.var, ttl_s=ttl, clock=self.clock)
@@ -166,8 +177,19 @@ class StoreTests(unittest.TestCase):
         s5 = st.new()
         s5.updated_at = "yesterday"
         self.assertTrue(st.expired(s5))
-        # nothing was ever written under the repo
-        self.assertFalse((ROOT / "var").exists())
+        # nothing was written under the repo's var/ by this test (a real run may have left one there)
+        self.assertEqual(tree(ROOT / "var"), self.repo_var)
+
+    def test_repo_var_guard_compares_before_and_after(self):  # F-14
+        # a var/ left by a real run is not a failure; a file written during the test is
+        left = Path(self.tmp.name) / "left-by-a-run"
+        (left / "sessions").mkdir(parents=True)
+        (left / "sessions" / "old.json").write_text("{}", encoding="utf-8")
+        before = tree(left)
+        self.assertEqual(tree(left), before)
+        (left / "sessions" / "new.json").write_text("{}", encoding="utf-8")
+        self.assertNotEqual(tree(left), before)
+        self.assertEqual(tree(Path(self.tmp.name) / "absent"), {})
 
     def test_config_switches(self):  # SESSION_TTL_S / SPEND_CAP_USD / VAR_DIR
         good = {"OPENROUTER_API_KEY": FAKE_KEY, "THB_PER_USD": "34.9", "RATE_DATE": "2026-09-22"}
