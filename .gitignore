@@ -7,7 +7,6 @@
 !/.gitignore
 !/README.md
 !/LICENSE
-!/CLAUDE.md
 !/tests/
 !/app/
 !/.env.example
@@ -17,6 +16,7 @@
 /memory/
 /prototypes/
 /spikes/
+/CLAUDE.md
 
 # --- never, even inside an allowlisted folder ---
 /var/
