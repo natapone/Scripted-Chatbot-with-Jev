@@ -157,7 +157,8 @@ class ClassifyTests(unittest.TestCase):
         block = turn.jev_block(v.answer, v.by_state)
         self.assertEqual((block["intent"], block["confidence"], block["by_state"]), ("none", 0.91, True))
         self.assertEqual(sorted(block), sorted(["status", "intent", "confidence", "entities", "t_sent", "t_received",
-                                               "ms", "cost_usd", "request_id", "by_state"]))
+                                               "ms", "cost_usd", "request_id", "by_state",
+                                               "jev_ms", "input_tokens", "output_tokens"]))    # Story 2.3
         self.assertEqual((block["ms"], block["cost_usd"], block["request_id"], block["status"]), (338, 0.000164, "gen-1", 200))
         v = turn.classify(s, "2 ถุง ค่าส่งเท่าไหร่", FLOW, r.client, spend_cap_usd=0.50, clock=r.clock)
         self.assertEqual((v.outcome, v.intent, v.by_state, v.answer.intent), ("matched", "inform", True, "faq.shipping_fee"))

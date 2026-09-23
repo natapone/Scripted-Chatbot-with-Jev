@@ -245,6 +245,7 @@ class Runs:
                                    contexts_after=cs.live_contexts())
             entry["batch"] = run.run_id
             entry["batch_n"] = n
+            entry["judged"] = v.intent               # what the message was judged as; a by-state row names it
             entry["correct"] = bool(score["loop_ok"])
             s.turn_no += 1
             s.log.append(entry)
@@ -268,7 +269,11 @@ def recap(entries: list[dict], *, thb_per_usd: float, rate_date: str, target: in
     """The recap's figures, from a run's log entries — raw, unrounded, for the recording driver.
     `avg_ms` and `total_usd` follow the key-info block's rule (`shared.js` § `updateKeyInfo`): over
     entries with a `jev` block that are neither `model_failed` nor `cap_reached`. `elapsed_ms` is the
-    first `t_sent` to the last `t_received` in the log; `wall_ms` is the run's own clock."""
+    first `t_sent` to the last `t_received` in the log; `wall_ms` is the run's own clock.
+    Story 2.3: `avg_jev_ms` is OpenRouter's server time (`jev_ms`) averaged over the answered entries
+    that carry it — the key-info block's AVG RESPONSE; `avg_ms` stays the round trip. The token
+    figures are over answered entries that carry them; `usd_per_input_mtok` is the cost divided back
+    by the input tokens, a cross-check on `usage.cost`, never a source of it."""
     calls = len(entries)
     answered = [e for e in entries if e.get("jev") and e.get("outcome") not in FAILED]
     ms = [e["jev"].get("ms") or 0 for e in answered]
@@ -280,10 +285,21 @@ def recap(entries: list[dict], *, thb_per_usd: float, rate_date: str, target: in
         last = max(parse_stamp(j["t_received"]) for j in stamped)
         elapsed_ms = (last - first).total_seconds() * 1000
     correct = sum(1 for e in entries if e.get("correct"))
+    num = lambda v: isinstance(v, (int, float)) and not isinstance(v, bool)
+    jev_ms = [e["jev"]["jev_ms"] for e in answered if num(e["jev"].get("jev_ms"))]
+    tokened = [e["jev"] for e in answered if num(e["jev"].get("input_tokens"))]
+    tin = sum(j["input_tokens"] for j in tokened)
+    tout = sum(j.get("output_tokens") or 0 for j in tokened)
+    tokened_usd = sum(j.get("cost_usd") or 0.0 for j in tokened)
     return {"calls": calls, "target": target, "concurrency": concurrency,
             "elapsed_ms": elapsed_ms, "wall_ms": wall_ms,
             "calls_per_s": calls / (elapsed_ms / 1000) if elapsed_ms else None,
             "avg_ms": sum(ms) / len(ms) if ms else None,
+            "avg_jev_ms": sum(jev_ms) / len(jev_ms) if jev_ms else None, "jev_timed": len(jev_ms),
+            "total_input_tokens": tin, "total_output_tokens": tout,
+            "avg_input_tokens": tin / len(tokened) if tokened else None,
+            "avg_output_tokens": tout / len(tokened) if tokened else None,
+            "usd_per_input_mtok": tokened_usd / tin * 1e6 if tin else None,
             "answered": len(answered),
             "correct": correct, "correct_share": correct / calls if calls else None,
             "fallbacks": sum(1 for e in entries if e.get("outcome") == "fallback"),

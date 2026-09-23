@@ -4,6 +4,7 @@ snapshots go to a temp dir."""
 from __future__ import annotations
 
 import json
+import re
 import tempfile
 import threading
 import unittest
@@ -19,12 +20,19 @@ CAT = testset.read_catalogue()
 CASES = testset.load_cases(CAT)
 LABEL = {c["text"]: c for c in CASES}
 DELIVERY = [c["text"] for c in CASES if c["intent"] == "give_delivery_details"]
+USD_PER_INPUT_TOKEN = 0.042 / 1_000_000       # Jev's price: $0.042 per million input tokens, output free
+# Real (usage.cost, input_tokens, output_tokens) triples as OpenRouter reported them — S-3 and S-1's
+# recorded responses; numbers only. The cross-check below holds on every one of the 1,229 recorded.
+RECORDED_USAGE = [(9.4458e-05, 2249, 217), (9.45e-05, 2250, 217), (9.4962e-05, 2261, 217),
+                  (7.6146e-05, 1813, 310), (7.6104e-05, 1812, 307)]
 
 
-def labelled(*, fail=(), timeout=(), http=(), none=(), before=None, cost=0.000163):
+def labelled(*, fail=(), timeout=(), http=(), none=(), before=None, cost=0.000163, metered=False):
     """A connection class: each request is answered with the label of the case whose text it carries
     (`none` → a low-confidence `none`); texts in `fail` refuse, in `timeout` time out, in `http` get a
-    500. `before(body)` runs first, for a barrier or a gate. `log` counts, thread-safe."""
+    500. `before(body)` runs first, for a barrier or a gate. `log` counts, thread-safe. `metered`
+    answers as OpenRouter does (Story 2.3): input tokens from the request's size, output tokens, the
+    cost at $0.042 per million input tokens, and a `Server-Timing` header with a `cfWorker` dur."""
     log = {"opened": 0, "sent": [], "timeouts": set()}
     lock = threading.Lock()
 
@@ -53,6 +61,10 @@ def labelled(*, fail=(), timeout=(), http=(), none=(), before=None, cost=0.00016
             else:
                 c = LABEL[text]
                 self._next = (200, reply((c["accept_intents"] or [c["intent"]])[0], 0.95, cost=cost, **c["entities"]))
+            if metered and self._next[0] == 200:
+                tin = len(body) // 7
+                self._next[1]["usage"] = {"cost": tin * USD_PER_INPUT_TOKEN, "input_tokens": tin, "output_tokens": 217}
+                self._timing = f"cfEdge;dur=3, cfOrigin;dur=0, cfWorker;dur={400 + tin % 50}"
 
         def getresponse(self):
             status, data = self._next
@@ -62,6 +74,8 @@ def labelled(*, fail=(), timeout=(), http=(), none=(), before=None, cost=0.00016
             r = R()
             r.status = status
             r.read = lambda: json.dumps(data).encode("utf-8")
+            if metered:
+                r.getheader = lambda name, default=None: getattr(self, "_timing", None) if name == "Server-Timing" else default
             return r
 
         def close(self):
@@ -212,6 +226,17 @@ class RunTests(unittest.TestCase):
         self.assertTrue(r2.runs.get(r2.s.session_id).wait(5))
 
 
+    def test_a_by_state_row_is_labelled_by_what_was_judged(self):  # Story 2.3 AC-1
+        case = next(c for c in CASES if c["text"] == "เก็บปลายทางครับ")        # n 46, under ask_payment
+        r = Rig(self, labelled(), cases=[case])
+        started, run = r.run(1)
+        e = r.store.get(r.s.session_id).log[-1]
+        self.assertEqual((e["outcome"], e["jev"]["by_state"], e["jev"]["awaiting"], e["judged"]),
+                         ("matched", True, "payment", "inform"))
+        self.assertNotEqual(e["response_id"], "inform")               # the next prompt, which the row used to name
+        self.assertEqual(e["contexts_before"], ["ask_payment"])        # what is measured is unchanged
+
+
 class CapAndRecapTests(unittest.TestCase):
 
     def test_refused_before_its_first_call(self):  # AC-4
@@ -266,6 +291,44 @@ class CapAndRecapTests(unittest.TestCase):
         self.assertEqual((rc["thb_per_usd"], rc["rate_date"], rc["model"]), (34.9, "2026-09-22", "typesafe/jev-1.13"))
         # the recap from the entries alone (a static function the driver's figures can be re-derived with)
         self.assertEqual(speed.recap([], thb_per_usd=34.9, rate_date="d", target=0, concurrency=1, wall_ms=0, model="m")["calls"], 0)
+
+
+class TokenTests(unittest.TestCase):
+    """Story 2.3 — cost stays OpenRouter's `usage.cost`; the tokens let anyone cross-check it."""
+
+    def test_cost_cross_checks_against_tokens(self):  # AC-5
+        for cost, tin, tout in RECORDED_USAGE:                     # OpenRouter's own figures: output is free
+            self.assertAlmostEqual(cost, tin * USD_PER_INPUT_TOKEN, delta=cost * 0.01, msg=(cost, tin, tout))
+        results = Path(__file__).resolve().parent.parent / "spikes"
+        if results.exists():                                         # local only: every recorded response
+            n = 0
+            for f in results.glob("*/results/*.json"):
+                for u in re.findall(r'"usage":\s*(\{[^{}]*\})', f.read_text(encoding="utf-8")):
+                    u = json.loads(u)
+                    if u.get("input_tokens") and u.get("cost"):
+                        n += 1
+                        self.assertAlmostEqual(u["cost"], u["input_tokens"] * USD_PER_INPUT_TOKEN, delta=u["cost"] * 0.01, msg=str(f))
+            self.assertGreater(n, 1000)
+        # a run: the log keeps the tokens and the server time; the recap's figures agree with the key-info rule
+        r = Rig(self, labelled(fail={CASES[speed.case_index(2, len(CASES))]["text"]}, metered=True))
+        started, run = r.run(60)
+        rc = r.runs.progress(r.s.session_id)["recap"]
+        log = r.store.get(r.s.session_id).log
+        answered = [e["jev"] for e in log if e.get("jev") and e["outcome"] not in speed.FAILED]
+        self.assertEqual((rc["answered"], rc["jev_timed"]), (59, 59))
+        self.assertEqual(rc["avg_jev_ms"], sum(j["jev_ms"] for j in answered) / 59)
+        self.assertNotEqual(rc["avg_jev_ms"], rc["avg_ms"])          # server time beside the round trip, not instead
+        self.assertEqual(rc["total_input_tokens"], sum(j["input_tokens"] for j in answered))
+        self.assertEqual(rc["avg_input_tokens"], rc["total_input_tokens"] / 59)
+        self.assertEqual((rc["total_output_tokens"], rc["avg_output_tokens"]), (59 * 217, 217))
+        self.assertAlmostEqual(rc["total_usd"], rc["total_input_tokens"] * USD_PER_INPUT_TOKEN, delta=rc["total_usd"] * 0.01)
+        self.assertAlmostEqual(rc["usd_per_input_mtok"], 0.042, places=6)
+        failed = next(e for e in log if e["outcome"] == "model_failed")
+        self.assertEqual((failed["jev"]["jev_ms"], failed["jev"]["input_tokens"]), (None, None))
+        # a log from before Story 2.3 carries none of them: the figures are None, not zero
+        old = speed.recap([{"outcome": "matched", "jev": {"ms": 500, "cost_usd": 0.0001}}], thb_per_usd=34.9,
+                          rate_date="d", target=1, concurrency=1, wall_ms=1, model="m")
+        self.assertEqual((old["avg_ms"], old["avg_jev_ms"], old["avg_input_tokens"], old["usd_per_input_mtok"]), (500, None, None, None))
 
 
 class RouteTests(unittest.TestCase):

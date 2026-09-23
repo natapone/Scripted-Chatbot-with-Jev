@@ -14,7 +14,7 @@ import unittest.mock
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from app import config, flow, jev, server
+from app import config, flow, jev, server, turn
 from app.__main__ import main
 
 FAKE_KEY = "sk-or-v1-test-key-never-real"
@@ -36,7 +36,7 @@ GOOD_REPLY = {
 }
 
 
-def fake(status=200, reply=None, raise_=None):
+def fake(status=200, reply=None, raise_=None, headers=None):
     """A stand-in for http.client.HTTPSConnection: records the request, returns one canned answer."""
     sent = []
 
@@ -56,6 +56,8 @@ def fake(status=200, reply=None, raise_=None):
             r = R()
             r.status = status
             r.read = lambda: json.dumps(reply).encode("utf-8") if reply is not None else b""
+            if headers is not None:
+                r.getheader = lambda name, default=None: headers.get(name, default)
             return r
 
         def close(self):
@@ -161,6 +163,44 @@ class AskTests(unittest.TestCase):
             self.assertNotIn(FAKE_KEY, json.dumps(dataclasses.asdict(a), ensure_ascii=False, default=str))
         self.assertNotIn("raw", repr(a))   # the body is kept for the viewer, not for the log line
         self.assertNotIn("key", {f.name for f in dataclasses.fields(jev.JevAnswer)})
+
+
+class ServerTimeAndTokensTests(unittest.TestCase):
+    """Story 2.3 — OpenRouter's server time and the tokens, kept beside the round trip and the cost."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.body = flow.load().build_request("รับกี่ถุงดีคะ?", "1 ถุงค่ะ", "quantity", [], ["ask_quantity"])
+
+    def answer(self, headers, reply=None):
+        conn = fake(200, reply or dict(GOOD_REPLY, usage={"cost": 0.0000638, "input_tokens": 1519, "output_tokens": 12}),
+                    headers=headers)
+        return jev.ask(FAKE_KEY, self.body, connection=conn, clock=ticking(T0, T0 + timedelta(milliseconds=1087)))
+
+    def test_server_time_from_the_cfworker_entry(self):  # AC-3
+        a = self.answer({"Server-Timing": "cfEdge;dur=3, cfOrigin;dur=0, cfWorker;dur=612"})
+        self.assertEqual((a.jev_ms, a.ms), (612, 1087))              # the round trip is unchanged beside it
+        self.assertEqual((a.input_tokens, a.output_tokens, a.cost_usd), (1519, 12, 0.0000638))
+        # through the kept-alive client too, and into the log's jev block
+        c = jev.Client(FAKE_KEY, connection=fake(200, GOOD_REPLY, headers={"Server-Timing": "cfWorker;dur=540.6"}))
+        b = jev.ask(None, self.body, client=c, clock=ticking(T0, T0 + timedelta(milliseconds=700)))
+        block = turn.jev_block(b)
+        self.assertEqual((block["jev_ms"], block["ms"], block["input_tokens"], block["output_tokens"]), (541, 700, None, None))
+        for header, want in (("cfWorker;dur=0", 0), ('cfWorker;desc="w";dur=88', 88), ("cfworker;dur=5", None),
+                             ("cfEdge;dur=3", None), ("cfWorker", None), ("cfWorker;dur=", None), ("cfWorker;dur=abc", None),
+                             ("cfWorker;dur=-4", None), ("", None), (None, None)):
+            self.assertEqual(jev.server_ms(header), want, header)
+
+    def test_absent_or_malformed_is_null_and_nothing_else_moves(self):  # AC-3
+        for headers in ({}, {"Server-Timing": "garbage"}, None):          # None: a response with no getheader at all
+            a = self.answer(headers)
+            self.assertIsNone(a.jev_ms, headers)
+            self.assertEqual((a.ms, a.intent, a.error), (1087, "inform", None))
+        a = self.answer({}, reply=dict(GOOD_REPLY, usage={"cost": 0.0001, "input_tokens": "12", "output_tokens": True}))
+        self.assertEqual((a.input_tokens, a.output_tokens), (None, None))  # only whole numbers are tokens
+        dead = jev.ask(FAKE_KEY, self.body, connection=fake(raise_=ConnectionRefusedError("no")),
+                       clock=ticking(T0, T0 + timedelta(milliseconds=3)))
+        self.assertEqual((dead.status, dead.jev_ms, dead.input_tokens), (0, None, None))
 
 
 class DeadAddressTests(unittest.TestCase):

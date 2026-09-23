@@ -127,6 +127,7 @@ class ServerTests(unittest.TestCase):
         html = self.get("/")[2].decode("utf-8")
         # Story 1.5 adds exactly its named hooks: data-status, rate-date, data-total-usd, the raw <details>;
         # Story 2.2 boots the run from the address instead of mounting the speed-test control (DR-010)
+        total_turns = '<div><div class="k">Total turns</div><div class="v" id="total-turns" data-testid="total-turns">0</div></div>\n'
         applied = '<h4>What the bot did</h4><div id="viewer-applied" data-testid="viewer-applied"></div>\n'
         self.assertEqual(html, PROTOTYPE_PAGE
                          .read_text(encoding="utf-8").replace("<b>jev-1.13</b>", '<b id="model-id">jev-1.13</b>')
@@ -136,6 +137,8 @@ class ServerTests(unittest.TestCase):
                                   'id="model-status" data-status="live">live</span> · <span id="rate" data-testid="rate"></span>'
                                   ' · <span id="rate-date" data-testid="rate-date"></span>')
                          .replace('data-testid="key-info">', 'data-testid="key-info" data-total-usd="0.000000">')
+                         .replace(total_turns, total_turns   # Story 2.3: the owner's fourth figure
+                                  + '        <div><div class="k">Avg tokens / turn</div><div class="v" id="avg-tokens" data-testid="avg-tokens">—</div></div>\n')
                          .replace(applied, applied
                                   + '        <details><summary>raw request</summary><pre id="viewer-raw-request" data-testid="viewer-raw-request"></pre></details>\n'
                                   + '        <details><summary>raw response</summary><pre id="viewer-raw-response" data-testid="viewer-raw-response"></pre></details>\n'))

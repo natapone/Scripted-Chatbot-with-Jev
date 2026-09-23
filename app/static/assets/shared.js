@@ -18,6 +18,7 @@ const el = (tag, attrs = {}, ...kids) => {
 };
 const fmt = {
   ms: (v) => `${Math.round(v)} ms`, ms10: (v) => `${Math.round(v / 10) * 10} ms`,
+  int: (v) => Math.round(v).toLocaleString("en-US"),
   baht: (usd, d = 4) => `฿${(usd * CFG.rate.thb_per_usd).toFixed(d)}`, usd: (v) => `$${v.toFixed(6)}`,
   conf: (v) => (v == null ? "—" : v.toFixed(2)),
 };
@@ -143,14 +144,15 @@ async function click(btn, opt) {
    (1-based) — the row's token and what the viewer opens by. Four lines (05_components § TurnRow):
    `#n · text` / intent + confidence (or FALLBACK / MODEL FAILED) / values with the provenance /
    ms · ฿ · $ · open. A by-state turn names the intent the bot acted on and the slot it was awaiting;
-   Jev's own answer stays on `data-jev-intent` and in the viewer. */
+   Jev's own answer stays on `data-jev-intent` and in the viewer. A run's entry carries `judged` — what
+   the message itself was judged as — and its by-state row names that, not the next prompt (Story 2.3). */
 const PROV = (src) => src === "jev" ? "from Jev" : src === "focus_sku" ? "from focus" : src.startsWith("context:") ? `from context (${src.slice(8)})` : `from ${src.replace(/_/g, " ")}`;
 function intentLine(e) {
   const j = e.jev || {};
   if (e.outcome === "model_failed") return `MODEL FAILED · ${j.error || "no answer"}`;
   if (e.outcome === "cap_reached") return "SPEND CAP REACHED · no call made";
   if (e.outcome === "fallback") return `FALLBACK · ${j.intent ?? "—"}`;
-  if (j.by_state) return `${e.response_id || "inform"} · by state${j.awaiting ? ` (awaiting ${j.awaiting})` : ""}`;
+  if (j.by_state) return `${e.judged || e.response_id || "inform"} · by state${j.awaiting ? ` (awaiting ${j.awaiting})` : ""}`;
   return j.intent ?? "—";
 }
 const KEEP_ROWS = 50;   // the panel keeps the newest 50 rows; the log, and so the key-info block, keeps every turn
@@ -169,17 +171,29 @@ function addTurnRow(e, n, animate = true) {
   const a = (e.applied || []).find((x) => x.product_from);          // Provenance: where the product came from
   if (a) row.append(el("div", { class: "prov", "data-testid": `turn-${n}-prov-product`, "data-source": a.product_from, text: `product ${a.set.match(/\[(.+?)\]/)?.[1] || a.to || ""}  ← ${PROV(a.product_from)}` }));
   const t4 = el("div", { class: "t4" });
-  t4.append(el("span", { "data-testid": `turn-${n}-ms`, "data-value": j?.ms ?? 0, text: j ? fmt.ms(j.ms || 0) : "—" }), el("span", { "data-testid": `turn-${n}-baht`, "data-value": j?.cost_usd ?? 0, text: j && j.cost_usd ? fmt.baht(j.cost_usd) : "฿0" }), el("span", { "data-testid": `turn-${n}-usd`, "data-value": j?.cost_usd ?? 0, text: j && j.cost_usd ? fmt.usd(j.cost_usd) : "—" }));
+  const stamp = j?.t_received || e.at || "";                        // Story 2.3: when the answer came back, as logged (UTC)
+  t4.append(el("span", { class: "at", "data-testid": `turn-${n}-at`, "data-value": stamp, text: stamp ? stamp.slice(11, 23) : "—" }));
+  // Story 2.3: OpenRouter's server time, then the round trip — `turn-${n}-jev` does not end in `-ms`,
+  // so the storyboard's `[data-testid$="-ms"]` anchor still lands on the round trip
+  t4.append(el("span", { "data-testid": `turn-${n}-jev`, "data-value": j?.jev_ms ?? "", text: `server ${j?.jev_ms != null ? fmt.ms(j.jev_ms) : "—"}` }), el("span", { class: "sep", text: "·" }));
+  t4.append(el("span", { "data-testid": `turn-${n}-ms`, "data-value": j?.ms ?? 0, text: `round trip ${j ? fmt.ms(j.ms || 0) : "—"}` }), el("span", { "data-testid": `turn-${n}-baht`, "data-value": j?.cost_usd ?? 0, text: j && j.cost_usd ? fmt.baht(j.cost_usd) : "฿0" }), el("span", { "data-testid": `turn-${n}-usd`, "data-value": j?.cost_usd ?? 0, text: j && j.cost_usd ? fmt.usd(j.cost_usd) : "—" }));
   t4.append(el("button", { class: "open", "data-testid": `turn-${n}-open`, text: "open", onclick: () => openViewer(n) }));
   row.append(t4); rows.prepend(row);
   while (rows.children.length > KEEP_ROWS) rows.lastElementChild.remove();
 }
+/* AVG RESPONSE is OpenRouter's server time (`jev_ms`) over the answered calls that carry it — not the
+   round trip (Story 2.3). AVG TOKENS / TURN is the input tokens over the answered calls that carry them:
+   times $0.042 per million it gives back the cost, which stays OpenRouter's `usage.cost`. */
+const num = (v) => typeof v === "number" && isFinite(v);
 function updateKeyInfo() {
   const s = S.session; const answered = (s?.log || []).filter((e) => e.jev && e.outcome !== "model_failed" && e.outcome !== "cap_reached");
-  const avg = answered.length ? answered.reduce((a, e) => a + (e.jev.ms || 0), 0) / answered.length : null;
+  const timed = answered.filter((e) => num(e.jev.jev_ms)); const tokened = answered.filter((e) => num(e.jev.input_tokens));
+  const avg = timed.length ? timed.reduce((a, e) => a + e.jev.jev_ms, 0) / timed.length : null;
+  const tok = tokened.length ? tokened.reduce((a, e) => a + e.jev.input_tokens, 0) / tokened.length : null;
   const usd = answered.reduce((a, e) => a + (e.jev.cost_usd || 0), 0);
   const turns = s?.log?.length ?? 0;   // every committed message — typed, clicked or missed — as the rows are numbered
   set("#avg-ms", avg == null ? "—" : fmt.ms10(avg), avg ?? 0); set("#total-baht", fmt.baht(usd, 3), usd); set("#total-turns", String(turns), turns);
+  set("#avg-tokens", tok == null ? "—" : fmt.int(tok), tok ?? 0);
   $("#key-info").setAttribute("data-total-usd", usd.toFixed(6));
   showStatus(s?.log);
   fitViewer();
@@ -214,7 +228,8 @@ function openViewer(n) {
     ...Object.entries(j.entities || {}).map(([k, val]) => [k, val]),
     ["status", `${j.status ?? "—"}${j.error ? ` · ${j.error}` : ""}`],
     ["t_sent → t_received", j.t_sent ? `${j.t_sent.slice(11, 23)} → ${(j.t_received || "").slice(11, 23)} = ${wall} ms` : "—"],
-    ["cost", j.cost_usd ? `${fmt.usd(j.cost_usd)} → ${fmt.baht(j.cost_usd)}` : "—"],
+    ["server time", num(j.jev_ms) ? `${fmt.ms(j.jev_ms)} (OpenRouter)` : "—"],
+    ["cost", j.cost_usd ? `${fmt.usd(j.cost_usd)} → ${fmt.baht(j.cost_usd)}${num(j.input_tokens) ? ` · tokens ${fmt.int(j.input_tokens)} in / ${fmt.int(j.output_tokens || 0)} out` : ""}` : "—"],
     ["request_id", j.request_id || "—"],
   ]));
   // What the bot did — each write, and where its product came from
