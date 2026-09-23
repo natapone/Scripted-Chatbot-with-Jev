@@ -83,7 +83,7 @@ class StaticTests(unittest.TestCase):
 
     # 05_components.md's tokens for the chat screen (P-001 / W-001), by the component that owns them
     TOKENS = {
-        "index.html": ("chat", "messages", "composer", "send", "start-over", "panel", "key-info", "avg-ms", "avg-tokens",
+        "index.html": ("chat", "messages", "composer", "send", "start-over", "panel", "key-info", "throughput", "avg-tokens",
                        "total-baht", "total-turns", "viewer", "viewer-close", "viewer-sent", "viewer-back",
                        "viewer-applied", "rate", "rate-date", "model-status", "band-top", "band-bottom",
                        "viewer-raw-request", "viewer-raw-response"),              # Story 1.5: the page's own <details>
@@ -106,7 +106,7 @@ class StaticTests(unittest.TestCase):
                     self.assertIn(f'"data-testid": "{token}"', served[name], f"{token} in {name}")
         # the figures a driver reads carry data-value; the composer its state; a button its liveness
         js = served["shared.js"]
-        for figure in ("avg-ms", "total-baht", "total-turns", "avg-tokens"):
+        for figure in ("throughput", "total-baht", "total-turns", "avg-tokens"):
             self.assertIn(f'set("#{figure}"', js, figure)
         self.assertIn('"data-value": j?.ms', js)
         self.assertIn('"data-value": j?.cost_usd', js)
@@ -184,7 +184,7 @@ class StaticTests(unittest.TestCase):
         section = d[i:d.index("\n### ", i + 4)]
         row = next(line for line in section.splitlines() if line.startswith("| **Tokens**"))
         row = row.split("— *Delta")[0]                                # a note's words are not tokens
-        return [t for t in re.findall(r"`([^`]+)`", row) if t not in ("jev", "focus_sku") and not t.startswith("context:")]
+        return [t for t in re.findall(r"`([^`]+)`", row) if t not in ("jev", "focus_sku", "avg-ms") and not t.startswith("context:")]   # avg-ms: replaced by throughput (owner, 2026-09-23)
 
     @unittest.skipUnless(DESIGN.exists(), "memory/ is local-only, not in this clone")
     def test_design_tokens_are_on_the_page(self):  # AC-6
@@ -244,7 +244,7 @@ class N { constructor(tag){ this.tag=tag; this.kids=[]; this.attrs={}; this.styl
   append(...xs){ for (const x of xs) this.kids.push(typeof x==='string'? Object.assign(new N('#text'),{own:x}) : x); }
   replaceChildren(...xs){ this.kids=[]; this.append(...xs); } prepend(x){ this.kids.unshift(x); } remove(){}
   addEventListener(){} querySelectorAll(){ return []; } querySelector(){ return null; } }
-const byId = {}; for (const id of ['viewer','viewer-title','viewer-sent','viewer-back','viewer-applied','viewer-raw-request','viewer-raw-response','key-info','key-status','model-status','avg-ms','total-baht','total-turns']) byId[id]=new N('div');
+const byId = {}; for (const id of ['viewer','viewer-title','viewer-sent','viewer-back','viewer-applied','viewer-raw-request','viewer-raw-response','key-info','key-status','model-status','throughput','total-baht','total-turns']) byId[id]=new N('div');
 var document = { createElement: (t)=>new N(t), createTextNode: (t)=>Object.assign(new N('#text'),{own:t}),
   querySelector: (sel)=> sel.startsWith('#') ? byId[sel.slice(1)] ?? null : null, querySelectorAll: ()=>[] };
 var Node = N; var setTimeout = (f)=>f();
@@ -306,12 +306,12 @@ var Node = N; var setTimeout = (f)=>f();
             f"for (const log of {json.dumps(steps)}) {{ S.session = {{ id: 's', log, raw: {{}} }}; updateKeyInfo();"
             " const b = document.querySelector('#model-status');"
             " out.push([b.textContent, b.className, b.getAttribute('data-status'), document.querySelector('#key-status').textContent,"
-            " document.querySelector('#total-baht').getAttribute('data-value'), document.querySelector('#avg-ms').textContent]); }"
+            " document.querySelector('#total-baht').getAttribute('data-value'), document.querySelector('#throughput').textContent]); }"
             "console.log(JSON.stringify(out));")
         out = self.node(script)
         self.assertEqual(out[0][:4], ["live", "badge live", "live", ""])
         self.assertEqual(out[1][:4], ["down", "badge down", "down", "● unreachable · ConnectionRefusedError"])
-        self.assertEqual((out[1][4], out[1][5]), ("0.000164", "200 ms"))             # the failed turn is not counted; AVG is server time (2.3)
+        self.assertEqual((out[1][4], out[1][5]), ("0.000164", "—"))                  # the failed turn is not counted; THROUGHPUT needs two answered calls
         self.assertEqual(out[2][:4], out[1][:4])                                     # a click makes no call: still down
         self.assertEqual(out[3][:4], ["live", "badge live", "live", ""])             # the next answered call: live, line gone
         self.assertEqual(out[4][:4], ["cap", "badge cap", "cap", "● spend cap reached"])
@@ -406,7 +406,7 @@ class N { constructor(tag){ this.tag=tag; this.kids=[]; this.attrs={}; this.styl
   querySelectorAll(sel){ return this.all().filter(n=>n.match(sel)); } querySelector(sel){ return this.querySelectorAll(sel)[0]||null; }
   addEventListener(){} closest(){ return null; } }
 const byId = {};
-for (const id of ['messages','rows','viewer','viewer-title','viewer-sent','viewer-back','viewer-applied','viewer-raw-request','viewer-raw-response','key-info','key-status','model-status','avg-ms','total-baht','total-turns','avg-tokens','composer']) byId[id]=new N('div');
+for (const id of ['messages','rows','viewer','viewer-title','viewer-sent','viewer-back','viewer-applied','viewer-raw-request','viewer-raw-response','key-info','key-status','model-status','throughput','total-baht','total-turns','avg-tokens','composer']) byId[id]=new N('div');
 byId.composer.append(new N('input'), Object.assign(new N('span'),{className:'helper'})); byId.composer.dataset.state='ready';
 var document = { createElement:(t)=>new N(t), createTextNode:(t)=>Object.assign(new N('#text'),{own:t}),
   querySelector:(sel)=>{ if (sel.startsWith('#')) { const [id, rest]=sel.slice(1).split(' '); const n=byId[id]??null; return rest&&n ? n.querySelector(rest) : n; } return null; },
@@ -431,7 +431,7 @@ function item(n, text, masked=false){ const e = { turn_id: 'run-1-'+n, turn_no: 
 function screen(){ return { you: byId.messages.children.filter(n => n.cls().includes('you')).map(n => [n.getAttribute('data-testid'), n.textContent, n.getAttribute('data-masked')]),
   bot: byId.messages.children.filter(n => n.cls().includes('bot')).map(n => n.getAttribute('data-testid')), bubbles: byId.messages.querySelectorAll('.bubble').length,
   rows: byId.rows.children.map(r => r.getAttribute('data-testid') || r.className), turns: byId['total-turns'].textContent, usd: byId['key-info'].getAttribute('data-total-usd'),
-  avg: byId['avg-ms'].textContent, composer: byId.composer.dataset.state, input_disabled: byId.composer.querySelector('input').disabled, log: S.session.log.length, status: byId['key-status'].textContent }; }
+  avg: byId['throughput'].textContent, composer: byId.composer.dataset.state, input_disabled: byId.composer.querySelector('input').disabled, log: S.session.log.length, status: byId['key-status'].textContent }; }
 """
 
     def page(self, script):
@@ -470,12 +470,12 @@ function screen(){ return { you: byId.messages.children.filter(n => n.cls().incl
             "S.session.raw = {}; openViewer(1); const back = byId['viewer-back'].textContent;"
             "console.log(JSON.stringify({ line: row(1).querySelector('.t4').textContent, jev: [1, 3].map((n) => [hook(n, 'jev').textContent, hook(n, 'jev').getAttribute('data-value')]),"
             " ms: [hook(1, 'ms').textContent, hook(1, 'ms').getAttribute('data-value')], anchor: firstMs(1),"
-            " avg: [byId['avg-ms'].textContent, byId['avg-ms'].getAttribute('data-value')], tok: [byId['avg-tokens'].textContent, byId['avg-tokens'].getAttribute('data-value')], back }));")
+            " avg: [byId['throughput'].textContent, byId['throughput'].getAttribute('data-value')], tok: [byId['avg-tokens'].textContent, byId['avg-tokens'].getAttribute('data-value')], back }));")
         self.assertTrue(out["line"].startswith("10:00:00.800|server 612 ms|·|round trip 1087 ms|"), out["line"])
         self.assertEqual(out["jev"], [["server 612 ms", "612"], ["server —", ""]])      # a pre-2.3 entry: no server time
         self.assertEqual(out["ms"], ["round trip 1087 ms", "1087"])
         self.assertEqual(out["anchor"], "turn-1-ms")                  # storyboard ch. 2: `[data-testid$="-ms"]` is the round trip
-        self.assertEqual(out["avg"], ["510 ms", "506"])               # (612 + 400) / 2 — the failed and the untimed call left out
+        self.assertEqual(out["avg"], ["3.8 /s", "3.75"])             # THROUGHPUT over the answered calls; the failed one left out
         self.assertEqual(out["tok"], ["1,560", "1559.5"])             # (1519 + 1600) / 2 input tokens
         self.assertIn("server time|612 ms (OpenRouter)", out["back"])
         self.assertIn("cost|$0.000064 → ฿0.0022 · tokens 1,519 in / 12 out", out["back"])
@@ -530,7 +530,7 @@ function screen(){ return { you: byId.messages.children.filter(n => n.cls().incl
         self.assertEqual(a["you"], [["you-1", "ค่าส่งเท่าไหร่คะ", "false"], ["you-2", "[delivery details]", "true"], ["you-3", "มีกาแฟอะไรบ้าง", "false"]])
         self.assertEqual(a["bot"], ["bot-run-1-1-1", "bot-run-1-2-1", "bot-run-1-3-1"])
         # the same panel, newest first; the key-info block from the log; the composer ready at the end
-        self.assertEqual((a["rows"], a["turns"], a["log"], a["usd"], a["avg"]), (["turn-3", "turn-2", "turn-1"], "3", 3, "0.000600", "500 ms"))   # Story 2.3: AVG is server time
+        self.assertEqual((a["rows"], a["turns"], a["log"], a["usd"], a["avg"]), (["turn-3", "turn-2", "turn-1"], "3", 3, "0.000600", "3.8 /s"))   # THROUGHPUT: 3 answers in 0.8 s
         self.assertEqual((a["composer"], a["input_disabled"], a["status"]), ("ready", False, ""))
         self.assertIn("customer_said|มีกาแฟอะไรบ้าง", out["viewer"])         # `open` on a run row shows its request
 

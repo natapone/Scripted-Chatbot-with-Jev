@@ -121,7 +121,7 @@ export const avgMs = (r) => `${int(Math.round(r.avg_jev_ms / 10) * 10)} ms`;
  *  The average and the total are rounded as the page's key-info block rounds them (to 10 ms; ฿ to
  *  3 places), so the card and key-info never show two figures for one fact in the same frame. */
 export function recapFigures(r) {
-  const need = ["calls", "elapsed_ms", "calls_per_s", "avg_jev_ms", "correct_share", "total_thb", "total_usd",
+  const need = ["calls", "elapsed_ms", "calls_per_s", "correct_share", "total_thb", "total_usd",
                 "cost_per_call_thb", "cost_per_call_usd"];
   const missing = need.filter((k) => typeof r?.[k] !== "number" || !Number.isFinite(r[k]));
   if (missing.length) throw new Error(`the recap has no ${missing.join(", ")}`);
@@ -129,7 +129,7 @@ export function recapFigures(r) {
     { key: "calls", label: "calls", value: int(r.calls) },
     { key: "time", label: "total time", value: `${fix(r.elapsed_ms / 1000, 1)} s` },
     { key: "rate", label: "calls / s", value: fix(r.calls_per_s, 1) },
-    { key: "avg", label: "avg server time", value: avgMs(r) },
+    { key: "every", label: "one answer every", value: `${int(Math.round(1000 / r.calls_per_s))} ms` },
     { key: "correct", label: "correct", value: `${fix(r.correct_share * 100, 1)} %` },
     { key: "total", label: "total cost", value: `฿${fix(r.total_thb, 3)} ($${fix(r.total_usd, 4)})` },
     { key: "per", label: "per call", value: `฿${fix(r.cost_per_call_thb, 4)}` },
@@ -190,7 +190,7 @@ export function renderYoutube({ sentence, chapters, recap, chat, model, rateDate
     const th = TH_TITLES[c.title];
     return `${i === 0 ? "0:00" : c.mmss} ${th ? `${th} (${c.title})` : c.title}`;
   });
-  const title = `Jev คุมแชทขายภาษาไทยทั้งบทสนทนา — ${int(r.calls)} ข้อความใน ${secs} วินาที`;
+  const title = `Jev คุมแชทขายภาษาไทยทั้งบทสนทนา — ${int(r.calls)} ข้อความใน ${secs} วินาที (${fix(r.calls_per_s, 1)} ข้อความต่อวินาที)`;
   const desc = [
     ...(sentence ? [`"${sentence}"`, ""] : []),
     `เดโมจริงของ Jev (${model}) บน OpenRouter: บอทขายเมล็ดกาแฟ "Beanly" ตอบลูกค้าเป็นภาษาไทย ทุกคำตอบเตรียมไว้ล่วงหน้า`,
@@ -199,8 +199,8 @@ export function renderYoutube({ sentence, chapters, recap, chat, model, rateDate
     `ในคลิปนี้:`,
     `• แชทหนึ่งบทสนทนาตั้งแต่ทักทายจนยืนยันออเดอร์ — ${chat.typedTurns} ข้อความที่พิมพ์ ทุกข้อความ Jev เป็นผู้ตัดสิน รวมทั้งบทสนทนา ฿${fix(chat.totalThb, 3)}`,
     `• ทุกการตัดสินใจแสดงบนจอ: intent ความมั่นใจ เวลา (ms) และค่าใช้จ่ายเป็นบาท พร้อมคำขอที่ส่งไปจริง`,
-    `• ทดสอบความเร็ว ${int(r.calls)} ข้อความ ครั้งละ ${int(r.concurrency)} ข้อความพร้อมกัน เสร็จใน ${secs} วินาที (${fix(r.calls_per_s, 1)} ครั้งต่อวินาที)`,
-    `• เวลาประมวลผลเฉลี่ยฝั่งเซิร์ฟเวอร์ ${avgMs(r)} · ตอบถูก ${fix(r.correct_share * 100, 1)} % · รวม ฿${fix(r.total_thb, 2)} ($${fix(r.total_usd, 4)}) · ครั้งละ ฿${fix(r.cost_per_call_thb, 4)}`,
+    `• ${int(r.calls)} ข้อความใน ${secs} วินาที — ${fix(r.calls_per_s, 1)} ข้อความต่อวินาที (ตอบทุก ~${int(Math.round(1000 / r.calls_per_s))} ms) ครั้งละ ${int(r.concurrency)} ข้อความพร้อมกัน`,
+    `• ตอบถูก ${fix(r.correct_share * 100, 1)} % · รวม ฿${fix(r.total_thb, 3)} ($${fix(r.total_usd, 4)}) · ครั้งละ ฿${fix(r.cost_per_call_thb, 4)}`,
     "",
     `ทุกตัวเลขอ่านจากการรันจริงในคลิป ไม่ได้พิมพ์ใส่เอง อัตราแลกเปลี่ยน ฿${fix(thbPerUsd, 2)} ต่อ $1 ณ วันที่ ${rateDate}`,
     `ข้อมูลลูกค้าในคลิปเป็นข้อมูลสมมติทั้งหมด`,

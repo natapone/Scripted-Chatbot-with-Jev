@@ -180,18 +180,20 @@ function addTurnRow(e, n, animate = true) {
   row.append(t4); rows.prepend(row);
   while (rows.children.length > KEEP_ROWS) rows.lastElementChild.remove();
 }
-/* AVG RESPONSE is OpenRouter's server time (`jev_ms`) over the answered calls that carry it — not the
-   round trip (Story 2.3). AVG TOKENS / TURN is the input tokens over the answered calls that carry them:
+/* THROUGHPUT is answered calls ÷ seconds from the first call sent to the last answer received — the
+   run recap's `calls_per_s` (owner, 2026-09-23: throughput, not average response). AVG TOKENS / TURN is the input tokens over the answered calls that carry them:
    times $0.042 per million it gives back the cost, which stays OpenRouter's `usage.cost`. */
 const num = (v) => typeof v === "number" && isFinite(v);
 function updateKeyInfo() {
   const s = S.session; const answered = (s?.log || []).filter((e) => e.jev && e.outcome !== "model_failed" && e.outcome !== "cap_reached");
   const timed = answered.filter((e) => num(e.jev.jev_ms)); const tokened = answered.filter((e) => num(e.jev.input_tokens));
-  const avg = timed.length ? timed.reduce((a, e) => a + e.jev.jev_ms, 0) / timed.length : null;
+  const stamped = answered.filter((e) => e.jev.t_sent && e.jev.t_received);
+  const span = stamped.length ? (Math.max(...stamped.map((e) => Date.parse(e.jev.t_received))) - Math.min(...stamped.map((e) => Date.parse(e.jev.t_sent)))) / 1000 : 0;
+  const tp = stamped.length >= 2 && span > 0 ? stamped.length / span : null;
   const tok = tokened.length ? tokened.reduce((a, e) => a + e.jev.input_tokens, 0) / tokened.length : null;
   const usd = answered.reduce((a, e) => a + (e.jev.cost_usd || 0), 0);
   const turns = s?.log?.length ?? 0;   // every committed message — typed, clicked or missed — as the rows are numbered
-  set("#avg-ms", avg == null ? "—" : fmt.ms10(avg), avg ?? 0); set("#total-baht", fmt.baht(usd, 3), usd); set("#total-turns", String(turns), turns);
+  set("#throughput", tp == null ? "—" : `${tp.toFixed(1)} /s`, tp ?? 0); set("#total-baht", fmt.baht(usd, 3), usd); set("#total-turns", String(turns), turns);
   set("#avg-tokens", tok == null ? "—" : fmt.int(tok), tok ?? 0);
   $("#key-info").setAttribute("data-total-usd", usd.toFixed(6));
   showStatus(s?.log);

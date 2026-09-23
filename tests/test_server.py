@@ -109,7 +109,7 @@ class ServerTests(unittest.TestCase):
         # the served page is the approved prototype's screen: its tokens and the model id. Story
         # 1.3b wired it — the title lost "— prototype", the mark is gone (tests/test_static.py)
         html = self.get("/")[2].decode("utf-8")
-        for token in ("composer", "send", "start-over", "key-info", "avg-ms", "total-baht",
+        for token in ("composer", "send", "start-over", "key-info", "throughput", "total-baht",
                       "total-turns", "viewer", "viewer-close", "rate", "model-status", "band-top",
                       "band-bottom"):
             self.assertIn(f'data-testid="{token}"', html, token)
@@ -133,6 +133,7 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(html, PROTOTYPE_PAGE
                          .read_text(encoding="utf-8").replace("<b>jev-1.13</b>", '<b id="model-id">jev-1.13</b>')
                          .replace(" — prototype</title>", "</title>")
+                         .replace('<div class="k">Avg response</div><div class="v" id="avg-ms" data-testid="avg-ms">', '<div class="k">Throughput</div><div class="v" id="throughput" data-testid="throughput">')
                          .replace("boot({ after: () => speedMount() });", "boot({ after: () => speedFromAddress() });")
                          .replace('id="model-status">live</span> · <span id="rate" data-testid="rate"></span>',
                                   'id="model-status" data-status="live">live</span> · <span id="rate" data-testid="rate"></span>'

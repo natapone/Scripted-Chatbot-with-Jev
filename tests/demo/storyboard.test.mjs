@@ -111,9 +111,9 @@ const RECAP = { calls: 100, concurrency: 32, elapsed_ms: 3221.4, calls_per_s: 31
 test("recapFigures shows every ruled figure from the recap, and refuses a missing one", () => {
   const f = Object.fromEntries(recapFigures(RECAP).map((x) => [x.key, x.value]));
   assert.equal(f.calls, "100"); assert.equal(f.time, "3.2 s"); assert.equal(f.rate, "31.0");
-  assert.equal(f.avg, "650 ms"); assert.equal(f.correct, "99.0 %");
+  assert.equal(f.every, "32 ms"); assert.equal(f.correct, "99.0 %");
   assert.equal(f.total, "฿0.581 ($0.0175)"); assert.equal(f.per, "฿0.0058"); assert.equal(f.tokens, "4,167 + 586");
-  assert.throws(() => recapFigures({ ...RECAP, avg_jev_ms: null }), /avg_jev_ms/);
+  assert.throws(() => recapFigures({ ...RECAP, calls_per_s: null }), /calls_per_s/);
 });
 
 test("measuredFor gives seconds, then baht, for as many slots as the subtitle has", () => {
@@ -141,12 +141,12 @@ test("renderYoutube is Thai, starts at 0:00, uses the stamps after it, and reads
   assert.match(md, /^0:00 แชทขายภาษาไทยหนึ่งบทสนทนา \(One Thai sales chat\)$/m);
   assert.match(md, /^2:35 ร้อยข้อความพร้อมกัน \(A hundred messages at once\)$/m);
   assert.match(md, /^"It picked the step, fast and cheap\."$/m);
-  assert.match(md, /100 ข้อความใน 3\.2 วินาที/); assert.match(md, /ทดสอบความเร็ว 100 ข้อความ ครั้งละ 32 ข้อความพร้อมกัน/);
+  assert.match(md, /100 ข้อความใน 3\.2 วินาที/); assert.match(md, /31\.0 ข้อความต่อวินาที \(ตอบทุก ~32 ms\) ครั้งละ 32 ข้อความพร้อมกัน/);
   assert.doesNotMatch(md, /(ใน|ละ) [\d,]+ แชท|[\d,]+ แชทใน/);   // counts are messages, not chats
   // F-28: the average as the recap card and key-info round it (646.83 → 650 ms), never a second figure
-  assert.match(md, /เวลาประมวลผลเฉลี่ยฝั่งเซิร์ฟเวอร์ 650 ms/); assert.doesNotMatch(md, /647 ms/);
+  assert.doesNotMatch(md, /เฉลี่ยฝั่งเซิร์ฟเวอร์/);   // throughput, not average response (owner, 2026-09-23)
   const card = Object.fromEntries(recapFigures(RECAP).map((x) => [x.key, x.value]));
-  assert.ok(md.includes(`เฉลี่ยฝั่งเซิร์ฟเวอร์ ${card.avg}`)); assert.match(md, /฿0\.58 \(\$0\.0175\)/); assert.match(md, /฿0\.030/);
+  assert.ok(md.includes(`ตอบทุก ~${card.every}`)); assert.match(md, /฿0\.581 \(\$0\.0175\)/); assert.match(md, /฿0\.030/);
 });
 
 test("renderLedger names the model, the route, the rate and the pass's cost", () => {
