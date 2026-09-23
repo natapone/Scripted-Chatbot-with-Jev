@@ -245,6 +245,7 @@ class Runs:
                                    contexts_after=cs.live_contexts())
             entry["batch"] = run.run_id
             entry["batch_n"] = n
+            entry["judged"] = v.intent               # what the message was judged as; a by-state row names it
             entry["correct"] = bool(score["loop_ok"])
             s.turn_no += 1
             s.log.append(entry)

@@ -212,6 +212,17 @@ class RunTests(unittest.TestCase):
         self.assertTrue(r2.runs.get(r2.s.session_id).wait(5))
 
 
+    def test_a_by_state_row_is_labelled_by_what_was_judged(self):  # Story 2.3 AC-1
+        case = next(c for c in CASES if c["text"] == "เก็บปลายทางครับ")        # n 46, under ask_payment
+        r = Rig(self, labelled(), cases=[case])
+        started, run = r.run(1)
+        e = r.store.get(r.s.session_id).log[-1]
+        self.assertEqual((e["outcome"], e["jev"]["by_state"], e["jev"]["awaiting"], e["judged"]),
+                         ("matched", True, "payment", "inform"))
+        self.assertNotEqual(e["response_id"], "inform")               # the next prompt, which the row used to name
+        self.assertEqual(e["contexts_before"], ["ask_payment"])        # what is measured is unchanged
+
+
 class CapAndRecapTests(unittest.TestCase):
 
     def test_refused_before_its_first_call(self):  # AC-4

@@ -143,14 +143,15 @@ async function click(btn, opt) {
    (1-based) — the row's token and what the viewer opens by. Four lines (05_components § TurnRow):
    `#n · text` / intent + confidence (or FALLBACK / MODEL FAILED) / values with the provenance /
    ms · ฿ · $ · open. A by-state turn names the intent the bot acted on and the slot it was awaiting;
-   Jev's own answer stays on `data-jev-intent` and in the viewer. */
+   Jev's own answer stays on `data-jev-intent` and in the viewer. A run's entry carries `judged` — what
+   the message itself was judged as — and its by-state row names that, not the next prompt (Story 2.3). */
 const PROV = (src) => src === "jev" ? "from Jev" : src === "focus_sku" ? "from focus" : src.startsWith("context:") ? `from context (${src.slice(8)})` : `from ${src.replace(/_/g, " ")}`;
 function intentLine(e) {
   const j = e.jev || {};
   if (e.outcome === "model_failed") return `MODEL FAILED · ${j.error || "no answer"}`;
   if (e.outcome === "cap_reached") return "SPEND CAP REACHED · no call made";
   if (e.outcome === "fallback") return `FALLBACK · ${j.intent ?? "—"}`;
-  if (j.by_state) return `${e.response_id || "inform"} · by state${j.awaiting ? ` (awaiting ${j.awaiting})` : ""}`;
+  if (j.by_state) return `${e.judged || e.response_id || "inform"} · by state${j.awaiting ? ` (awaiting ${j.awaiting})` : ""}`;
   return j.intent ?? "—";
 }
 const KEEP_ROWS = 50;   // the panel keeps the newest 50 rows; the log, and so the key-info block, keeps every turn

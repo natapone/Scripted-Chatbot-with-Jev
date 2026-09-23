@@ -219,13 +219,15 @@ class StaticTests(unittest.TestCase):
                  e("matched", "affirm", intent="affirm"),
                  e("fallback", "fallback.1", intent="none"),
                  e("model_failed", "system.unreachable", error="ConnectionRefusedError"),
-                 e("cap_reached", "system.cap", error="cap")]
+                 e("cap_reached", "system.cap", error="cap"),
+                 dict(e("matched", "ask_brew", intent="inform", by_state=True, awaiting="payment"), judged="inform")]
         out = self.node("console.log(JSON.stringify({lines: " + json.dumps(cases) + ".map(intentLine),"
                         " prov: ['jev', 'context:ask_quantity', 'focus_sku', 'context:offer_product', 'options_shown'].map(PROV)}))")
         self.assertEqual(out["lines"], ["inform · by state (awaiting quantity)",
                                         "give_delivery_details · by state (awaiting delivery)",
                                         "affirm", "FALLBACK · none", "MODEL FAILED · ConnectionRefusedError",
-                                        "SPEND CAP REACHED · no call made"])
+                                        "SPEND CAP REACHED · no call made",
+                                        "inform · by state (awaiting payment)"])     # Story 2.3: a run row names what was judged
         self.assertEqual(out["prov"], ["from Jev", "from context (ask_quantity)", "from focus",
                                        "from context (offer_product)", "from options shown"])
 
