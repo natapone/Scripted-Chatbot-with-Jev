@@ -60,7 +60,6 @@ function bot(m) {
 function you(m) {
   youCount += 1;
   const b = el("div", { class: "bubble you", "data-testid": `you-${youCount}`, "data-kind": m.kind, "data-masked": String(!!m.masked) }, document.createTextNode(m.text || ""));
-  if (m.kind === "clicked") b.append(el("span", { class: "badge", "data-testid": "badge-clicked", text: "clicked · no model call" }));
   $("#messages").append(b); scrollNew();
 }
 /* ReadBack (05_components.md): the prototype's grid — one row per line, the discount, the fee, the COD

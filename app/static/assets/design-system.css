@@ -44,7 +44,6 @@ button { font: inherit; cursor: pointer; }
 .bubble.bot.fallback { background: #f3ece2; }
 .bubble.bot.system { background: #ece7de; color: var(--ink-2); }
 .bubble.you { background: var(--you); align-self: flex-end; border-bottom-right-radius: 4px; }
-.bubble.you .badge { margin-left: 8px; }
 .bubble .name { font-size: var(--fs-label); color: var(--ink-3); margin-bottom: 4px; font-family: var(--font-en); }
 /* read-back table inside a bubble */
 .readback { display: grid; grid-template-columns: 1fr auto; gap: 2px 18px; margin: 8px 0; font-variant-numeric: tabular-nums; }

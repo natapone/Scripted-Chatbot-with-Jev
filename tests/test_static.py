@@ -87,7 +87,7 @@ class StaticTests(unittest.TestCase):
                        "total-baht", "total-turns", "viewer", "viewer-close", "viewer-sent", "viewer-back",
                        "viewer-applied", "rate", "rate-date", "model-status", "band-top", "band-bottom",
                        "viewer-raw-request", "viewer-raw-response"),              # Story 1.5: the page's own <details>
-        "shared.js": ("bot-${id}", "you-${youCount}", "opt-${i + 1}", "badge-clicked", "turn-${n}", "turn-${n}-intent",
+        "shared.js": ("bot-${id}", "you-${youCount}", "opt-${i + 1}", "turn-${n}", "turn-${n}-intent",
                       "turn-${n}-confidence", "turn-${n}-ms", "turn-${n}-baht", "turn-${n}-usd", "turn-${n}-open",
                       "turn-${n}-prov-product",                              # Story 1.5: F-1, now named by the design
                       "readback", "readback-total",                        # Story 1.4: the ReadBack component, from server data
@@ -147,9 +147,12 @@ class StaticTests(unittest.TestCase):
         self.assertIn('"total"', js)                                  # the total row's class, bold in the design system
         self.assertNotIn("totals(", js)
         self.assertNotIn("PROMO-", js)
-        # the customer bubble keeps its masked mark and the clicked badge; the sample button is any button
+        # the customer bubble keeps its masked mark; the sample button and the click tag are gone (Story 2.7)
         self.assertIn('"data-masked": String(!!m.masked)', js)
-        self.assertIn('"data-testid": "badge-clicked"', js)
+        self.assertNotIn("badge-clicked", js)
+        self.assertIn("if (r.log_entry.jev) addTurnRow(", js)          # a click (no jev block) adds no panel row
+        self.assertNotIn("no model call", js)
+        self.assertIn('"data-kind": m.kind', js)                     # the kind stays as data, not shown
         self.assertNotIn("ใช้ข้อมูลตัวอย่าง", js)
         self.assertNotIn("081-000-0000", js)
         css = self.get("/assets/design-system.css")[1]

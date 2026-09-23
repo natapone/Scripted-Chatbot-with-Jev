@@ -29,6 +29,15 @@ class TestSetTests(unittest.TestCase):
         self.assertTrue(any(c["intent"] == "give_delivery_details" for c in cases))
         self.assertTrue(any(c["intent"] == "none" for c in cases))
 
+    def test_the_delivery_cases_are_asked_as_the_customer_sees_it(self):  # Story 2.7, F-30
+        cases = [c for c in testset.load_cases(CAT) if "ask_delivery" in c["contexts"]]
+        self.assertEqual([c["n"] for c in cases], [106, 107, 108])
+        for c in cases:
+            req = turn.build_request(testset.build_session(c, FLOW), c["text"], FLOW)
+            self.assertEqual(c["shop_said"], turn.ASK_DELIVERY)
+            self.assertEqual(req["state"]["shop_said"], "รบกวนขอชื่อ ที่อยู่ และเบอร์โทรสำหรับจัดส่งค่ะ")
+            self.assertNotIn("เดโมนี้", json.dumps(req, ensure_ascii=False))
+
     def test_score_counts_the_loops_intent_against_the_label(self):
         cases = testset.load_cases(CAT)
         case = next(c for c in cases if c["intent"] == "greet")
@@ -74,7 +83,7 @@ class FilledOrderTests(unittest.TestCase):
                     for line in s.order["lines"]:
                         self.assertIn(f"{FLOW.products[line['sku']]['spoken_name']} × {line['qty']} ถุง", c["shop_said"])
                     self.assertEqual(s.contexts["confirm_order"]["params"], {"order_hash": order.order_hash(s.order)})
-                    self.assertEqual(s.order["delivery_text"], order.SAMPLE_DETAILS)   # the app's fictional sample
+                    self.assertEqual(s.order["delivery_text"], order.SAMPLE_DETAILS)   # the test set's fictional address
                 elif "offer_promo" in ctx:         # the promotion offered is the one the line fits
                     pid = s.contexts["offer_promo"]["params"]["promo_id"]
                     self.assertTrue(order.offer_text(pid).startswith(c["shop_said"].split(" สนใจไหมคะ")[0]))

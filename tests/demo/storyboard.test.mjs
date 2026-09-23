@@ -45,7 +45,7 @@ const FIXTURE = `# Storyboard — "A fictional demo"
 | # | Title | On screen | Drive | Callouts (anchor → text) | Subtitle | Key idea | ~s |
 |---|---|---|---|---|---|---|---|
 | 1 | One chat | greeting | built | \`.turn:first-child [data-testid$="-ms"]\` → Time and cost; \`[data-testid="viewer-sent"]\` → What was sent | It chooses the next step. | 1 | 45 |
-| 2 | A thousand chats at once | ?run=1000 | built | \`[data-testid="total-baht"]\` → The cost of all of them | 1,000 chats in about {measured} seconds. | 2 | 40 |
+| 2 | A thousand messages at once | ?run=1000 | built | \`[data-testid="total-baht"]\` → The cost of all of them | 1,000 messages in about {measured} seconds. | 2 | 40 |
 
 ## 8. The numbers
 `;
@@ -90,10 +90,11 @@ test("parseStoryboard reads title, sentence, ideas, frames and each chapter's st
 });
 
 test("sizeWords rewrites the run size only when a different size ran", () => {
-  const s = "1,000 chats, 32 at a time, in about {measured} seconds.";
+  const s = "1,000 customer messages, 32 at a time, in about {measured} seconds.";
   assert.equal(sizeWords(s, 1000), s);
-  assert.equal(sizeWords(s, 100), "100 chats, 32 at a time, in about {measured} seconds.");
-  assert.equal(sizeWords("A thousand chats at once", 100), "A hundred chats at once");
+  assert.equal(sizeWords(s, 100), "100 customer messages, 32 at a time, in about {measured} seconds.");
+  assert.equal(sizeWords("A thousand messages at once", 100), "A hundred messages at once");
+  assert.equal(sizeWords("A thousand messages, read from the run", 100), "A hundred messages, read from the run");
   assert.equal(sizeWords("A thousand calls, in numbers", 250), "A thousand calls, in numbers");
 });
 
@@ -133,14 +134,19 @@ test("mergeChapters offsets session 2 by session 1's duration and re-derives sec
 
 test("renderYoutube is Thai, starts at 0:00, uses the stamps after it, and reads every figure", () => {
   const md = renderYoutube({ sentence: "It picked the step, fast and cheap.",
-    chapters: [{ title: "One Thai sales chat", mmss: "0:01" }, { title: "A hundred chats at once", mmss: "2:35" }],
+    chapters: [{ title: "One Thai sales chat", mmss: "0:01" }, { title: "A hundred messages at once", mmss: "2:35" }],
     recap: RECAP, chat: { typedTurns: 5, totalThb: 0.0301 }, model: "typesafe/jev-1.13", rateDate: "2026-09-23", thbPerUsd: 33.17,
   });
   assert.match(md, /## ชื่อคลิป/); assert.match(md, /## แท็ก/);
   assert.match(md, /^0:00 แชทขายภาษาไทยหนึ่งบทสนทนา \(One Thai sales chat\)$/m);
-  assert.match(md, /^2:35 ร้อยแชทพร้อมกัน/m);
+  assert.match(md, /^2:35 ร้อยข้อความพร้อมกัน \(A hundred messages at once\)$/m);
   assert.match(md, /^"It picked the step, fast and cheap\."$/m);
-  assert.match(md, /100 แชทใน 3\.2 วินาที/); assert.match(md, /฿0\.58 \(\$0\.0175\)/); assert.match(md, /฿0\.030/);
+  assert.match(md, /100 ข้อความใน 3\.2 วินาที/); assert.match(md, /ทดสอบความเร็ว 100 ข้อความ ครั้งละ 32 ข้อความพร้อมกัน/);
+  assert.doesNotMatch(md, /(ใน|ละ) [\d,]+ แชท|[\d,]+ แชทใน/);   // counts are messages, not chats
+  // F-28: the average as the recap card and key-info round it (646.83 → 650 ms), never a second figure
+  assert.match(md, /เวลาประมวลผลเฉลี่ยฝั่งเซิร์ฟเวอร์ 650 ms/); assert.doesNotMatch(md, /647 ms/);
+  const card = Object.fromEntries(recapFigures(RECAP).map((x) => [x.key, x.value]));
+  assert.ok(md.includes(`เฉลี่ยฝั่งเซิร์ฟเวอร์ ${card.avg}`)); assert.match(md, /฿0\.58 \(\$0\.0175\)/); assert.match(md, /฿0\.030/);
 });
 
 test("renderLedger names the model, the route, the rate and the pass's cost", () => {
