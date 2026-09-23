@@ -338,6 +338,29 @@ class ClientTests(unittest.TestCase):
         self.assertLess(time.perf_counter() - t0, 1.0)
         self.assertIsNone(c._conn)
 
+    def test_sibling_shares_the_meter_and_never_retries(self):
+        """Story 2.1 (F-9): the speed test's pool — a timed-out or dropped call is one failed call,
+        not a retry, and every call counts on the server's client, which the spend cap reads."""
+        body = {"model": "typesafe/jev-1.13", "state": {}, "questions": {}}
+        parent_conn = scripted((200, GOOD_REPLY))
+        parent = jev.Client(FAKE_KEY, host="example.test", timeout=10, connection=parent_conn)
+        parent.post(body)
+        conn = scripted((200, GOOD_REPLY), TimeoutError("slow"), (200, GOOD_REPLY))
+        parent._connection = conn            # the sibling opens its connections from the same class
+        sib = parent.sibling(timeout=5)
+        self.assertEqual((sib.host, sib.timeout, sib.retry, parent.retry), ("example.test", 5, False, True))
+        self.assertEqual(sib.post(body)[0], 200)
+        # a used connection times out: one attempt, status 0, no second request on a new connection
+        self.assertEqual(sib.post(body), (0, {"error": "TimeoutError"}))
+        self.assertEqual((conn.log["opened"], len(conn.log["sent"])), (1, 2))
+        self.assertEqual(sib.post(body)[0], 200)
+        self.assertEqual(conn.log["sent"][0]["timeout"], 5)
+        self.assertEqual(conn.log["sent"][0]["headers"]["Authorization"], f"Bearer {FAKE_KEY}")
+        # one meter: the parent counts the sibling's three calls and two costs
+        self.assertEqual((parent.calls, sib.calls), (4, 4))
+        self.assertAlmostEqual(parent.spent_usd, 0.000164 * 3)
+        self.assertNotIn(FAKE_KEY, repr(sib))
+
 
 if __name__ == "__main__":
     unittest.main()

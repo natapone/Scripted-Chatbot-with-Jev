@@ -14,6 +14,11 @@ Story 1.3 adds `Client`: one kept-alive HTTPS connection (finding F-3 — a fres
 939 ms against S-3's 332 on a kept-alive one), reconnected on any socket or protocol error, a lock
 around the socket, and the process's own `spent_usd` / `calls` counters that the spend cap reads.
 `ask(client=…)` and `warm_up(client=…)` go through it; without one they behave as in Story 1.2.
+
+Story 2.1 adds `Client.sibling()` for the speed test's pool: another connection with the same key and
+host, **no retry** (an error or a timeout is one failed call, counted — F-9), its own timeout, and the
+same spend meter — so `spent_usd` and `calls` on the server's client count the pool too, and the
+per-process spend cap sees every call.
 """
 from __future__ import annotations
 
@@ -96,6 +101,20 @@ def post(key: str, body: dict, connection=http.client.HTTPSConnection, *,
         conn.close()
 
 
+class Meter:
+    """The spend and call counters one client and its siblings share; thread-safe."""
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self.spent_usd = 0.0
+        self.calls = 0
+
+    def add(self, *, usd: float = 0.0, calls: int = 0) -> None:
+        with self._lock:
+            self.spent_usd += usd
+            self.calls += calls
+
+
 class Client:
     """One kept-alive connection to OpenRouter, shared by every turn of every session (F-3).
 
@@ -108,14 +127,32 @@ class Client:
     """
 
     def __init__(self, key: str, host: str = HOST, timeout: float = TIMEOUT,
-                 connection=http.client.HTTPSConnection):
+                 connection=http.client.HTTPSConnection, *, retry: bool = True, meter: "Meter | None" = None):
         self._headers = _headers(key)
         self.host, self.timeout, self._connection = host, timeout, connection
+        self.retry = retry
         self._conn = None
         self._served = 0            # calls completed on the current connection
         self._lock = threading.Lock()
-        self.spent_usd = 0.0
-        self.calls = 0
+        self.meter = meter if meter is not None else Meter()
+
+    @property
+    def spent_usd(self) -> float:
+        """`usage.cost` summed over every call on this client and its siblings."""
+        return self.meter.spent_usd
+
+    @property
+    def calls(self) -> int:
+        return self.meter.calls
+
+    def sibling(self, timeout: float | None = None) -> "Client":
+        """Another connection sharing this client's key, host and spend meter, with no retry."""
+        c = Client.__new__(Client)
+        c._headers = self._headers
+        c.host, c._connection = self.host, self._connection
+        c.timeout = self.timeout if timeout is None else timeout
+        c.retry, c._conn, c._served, c._lock, c.meter = False, None, 0, threading.Lock(), self.meter
+        return c
 
     def __repr__(self) -> str:
         return f"Client(host={self.host!r}, calls={self.calls}, spent_usd={self.spent_usd:.6f})"
@@ -135,8 +172,8 @@ class Client:
 
     def post(self, body: dict) -> tuple[int, dict]:
         with self._lock:
-            self.calls += 1
-            attempts = 2 if self._conn is not None and self._served > 0 else 1
+            self.meter.add(calls=1)
+            attempts = 2 if self.retry and self._conn is not None and self._served > 0 else 1
             error = "OSError"
             for _ in range(attempts):
                 conn = self._conn or self._open()
@@ -148,7 +185,7 @@ class Client:
                     continue
                 self._served += 1
                 usage = data.get("usage") if isinstance(data.get("usage"), dict) else {}
-                self.spent_usd += float(usage.get("cost") or 0.0)
+                self.meter.add(usd=float(usage.get("cost") or 0.0))
                 return status, data
             return 0, {"error": error}
 
