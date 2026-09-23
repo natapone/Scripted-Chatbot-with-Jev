@@ -24,7 +24,7 @@ class ReplayTests(unittest.TestCase):
 
     def test_cases_load_as_sessions_with_awaiting_and_history(self):
         cases = replay.load_cases(CAT)
-        self.assertEqual(len(cases), 125)
+        self.assertEqual(len(cases), 129)          # 125 from S-3 + four browse-by-roast/taste cases (Story 1.7)
         slots: dict = {}
         for c in cases:
             s = replay.build_session(c, FLOW)
