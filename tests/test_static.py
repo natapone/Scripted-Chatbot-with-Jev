@@ -332,6 +332,33 @@ var Node = N; var setTimeout = (f)=>f();
         self.assertEqual(self.css_rule(css, ".chat-header")["width"], "var(--chat-w)")
         self.assertEqual(self.css_rule(css, ".cols")["grid-template-columns"], "var(--chat-w) 1fr")
 
+    # Story 2.3 — legible at 100 %, 1920×1080, DPR 1, from the page's own styles: the video's floor is
+    # a 10th-percentile of 20 CSS px (measured in Chromium at the Story's Verify); these few labels are
+    # the only text allowed under it, and nothing zooms.
+    SMALL_ALLOWED = {".bubble .name": 16, ".key-info .k": 16, ".badge": 14, ".viewer pre": 14}
+
+    def test_type_is_legible_without_zoom(self):  # Story 2.3 AC-7
+        css = self.get("/assets/design-system.css")[1]
+        root = self.css_rule(css, ":root")
+        tokens = {k: int(v[:-2]) for k, v in root.items() if k.startswith("--fs-")}
+        self.assertEqual((tokens["--fs-chat"], tokens["--fs-panel"], tokens["--fs-label"]), (20, 20, 16))
+        sizes = {}
+        for selectors, body in re.findall(r"(?m)^([^{}@/\n][^{}]*?)\s*\{([^}]*)\}", css):
+            m = re.search(r"font-size:\s*([^;]+)", body)
+            if not m:
+                continue
+            v = m.group(1).strip()
+            px = tokens[v[4:-1]] if v.startswith("var(") else int(v[:-2]) if v.endswith("px") else None
+            for sel in selectors.split(","):
+                sizes[sel.strip()] = px
+        small = {sel: px for sel, px in sizes.items() if px is not None and px < 20 and sel != ".proto-mark"}
+        self.assertEqual(small, self.SMALL_ALLOWED)
+        for sel in ("html", ".bubble", ".opt", ".btn-quiet", ".composer .helper", ".panel-header", ".turn .t1",
+                    ".turn .kv .k", ".turn .t4", ".turn .t4 .open", ".prov", ".viewer dl", ".viewer h4"):
+            self.assertGreaterEqual(sizes.get(sel, tokens["--fs-chat"] if sel == ".bubble" else 0), 20, sel)
+        served = self.get("/")[1] + self.get("/assets/shared.js")[1] + css
+        self.assertNotIn("zoom", served)                                 # recorded at 100 %: the page never zooms
+
     # Story 2.2 — DR-010: the speed test adds nothing to the page. The design's SpeedTest and
     # SpeedTestButton sections are superseded, so their tokens are diffed in reverse: none is served.
     GONE = ("speed-test-open", "speed-pop", "speed-chooser", "speed-target-100", "speed-target-1000", "speed-start",
