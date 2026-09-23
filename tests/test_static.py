@@ -90,14 +90,10 @@ class StaticTests(unittest.TestCase):
                       "turn-${n}-confidence", "turn-${n}-ms", "turn-${n}-baht", "turn-${n}-usd", "turn-${n}-open",
                       "turn-${n}-prov-product",                              # Story 1.5: F-1, now named by the design
                       "readback", "readback-total"),                       # Story 1.4: the ReadBack component, from server data
-        "speed.js": ("speed-test-open", "speed-pop", "speed-chooser", "speed-target-100", "speed-target-1000",
-                     "speed-start", "speed-test", "speed-count", "speed-target", "speed-elapsed-ms", "speed-per-s",
-                     "speed-correct", "speed-errors", "speed-summary"),
-    }
+    }                                                                        # Story 2.2: speed.js's tokens are gone (DR-010)
 
     def test_page_carries_every_token(self):
-        served = {"index.html": self.get("/")[1], "shared.js": self.get("/assets/shared.js")[1],
-                  "speed.js": self.get("/assets/speed.js")[1]}
+        served = {"index.html": self.get("/")[1], "shared.js": self.get("/assets/shared.js")[1]}
         for name, tokens in self.TOKENS.items():
             for token in tokens:
                 if "$" in token:                                     # a template: the literal the page builds
@@ -315,17 +311,183 @@ var Node = N; var setTimeout = (f)=>f();
         self.assertEqual(out[5][:4], ["live", "badge live", "live", ""])             # start over / a fresh page
         self.assertIn(".badge.cap::before", self.get("/assets/design-system.css")[1])
 
-    def test_speed_test_mounted_but_not_wired(self):
-        status, js = self.get("/assets/speed.js")
-        self.assertEqual(status, 200)
-        self.assertNotIn("FX.", js)                                  # nothing to read at mount now
-        self.assertNotIn("fixtures.json", js)
-        self.assertIn("not wired until Epic 2", js)
-        self.assertIn("function speedMount(", js)
-        self.assertIn("function speedStart(", js)
-        self.assertIn("function speedReset(", js)                    # start-over still resets it
-        self.assertNotIn("setInterval", js)                          # no simulated run
-        self.assertNotIn("S.session", js)                            # and it writes nothing to the session
+    # Story 2.2 — DR-010: the speed test adds nothing to the page. The design's SpeedTest and
+    # SpeedTestButton sections are superseded, so their tokens are diffed in reverse: none is served.
+    GONE = ("speed-test-open", "speed-pop", "speed-chooser", "speed-target-100", "speed-target-1000", "speed-start",
+            "speed-test", "speed-count", "speed-target", "speed-elapsed-ms", "speed-per-s", "speed-correct",
+            "speed-errors", "speed-phase", "speed-ticker", "speed-summary", "speed-status")
+
+    def test_speed_test_control_is_off_the_page(self):  # AC-1
+        served = {name: self.get(path)[1] for name, path in (("index.html", "/"), ("shared.js", "/assets/shared.js"),
+                                                              ("speed.js", "/assets/speed.js"),
+                                                              ("design-system.css", "/assets/design-system.css"))}
+        for name, text in served.items():
+            self.assertFalse("speed-" in text, name)                # no testid, id or class of the control
+            for words in ("speed test ▾", "not wired", "1,000 demo", "100 rehearsal", '"Start"', "btn-start"):
+                self.assertFalse(words in text, f"{words} in {name}")
+        tokens = list(self.GONE)
+        if self.DESIGN.exists():                                    # the reverse diff reads the design's own list
+            tokens += [t.replace('data-testid="', "").rstrip('"') for c in ("SpeedTest", "SpeedTestButton")
+                       for t in self.design_tokens(c) if "speed-" in t]            # `data-value` is the chat's too
+        for token in tokens:
+            for name, text in served.items():
+                self.assertFalse(token in text, f"{token} in {name}")
+        self.assertIn("speedFromAddress()", served["index.html"])  # the only thing the page boots for it
+        self.assertNotIn("speedMount", served["index.html"] + served["speed.js"])
+        self.assertNotIn("setInterval", served["speed.js"])        # no simulated run
+
+
+    # Story 2.2 — the run client, driven in a DOM just big enough for the chat's own functions:
+    # elements with parents and children, class selectors, the composer, a fetch that records
+    # every call and answers from a script, and an address bar with history.replaceState.
+    PAGE_DOM = r"""
+class N { constructor(tag){ this.tag=tag; this.kids=[]; this.attrs={}; this.style={}; this.own=''; this.className=''; this.parent=null; this.dataset={}; this.disabled=false; this.offsetHeight=96; this.offsetWidth=1; this.scrollTop=0; this.scrollHeight=0;
+    const self=this; this.classList={ add(c){ if(!self.cls().includes(c)) self.className=(self.className+' '+c).trim(); }, remove(c){ self.className=self.cls().filter(x=>x!==c).join(' '); }, contains(c){ return self.cls().includes(c); } }; }
+  cls(){ return String(this.className||'').split(/\s+/).filter(Boolean); }
+  get textContent(){ return this.own + this.kids.map(k=>k.textContent).join('|'); } set textContent(t){ this.own=String(t); this.kids=[]; }
+  setAttribute(k,v){ this.attrs[k]=String(v); } getAttribute(k){ return this.attrs[k] ?? null; } removeAttribute(k){ delete this.attrs[k]; }
+  append(...xs){ for (let x of xs){ if (typeof x==='string') x=Object.assign(new N('#text'),{own:x}); x.parent=this; this.kids.push(x); } }
+  prepend(x){ x.parent=this; this.kids.unshift(x); } replaceChildren(...xs){ this.kids=[]; this.append(...xs); }
+  remove(){ if (this.parent) { this.parent.kids=this.parent.kids.filter(k=>k!==this); this.parent=null; } }
+  get children(){ return this.kids.filter(k=>k.tag!=='#text'); } get firstElementChild(){ return this.children[0]||null; } get lastElementChild(){ const c=this.children; return c[c.length-1]||null; }
+  all(){ return this.children.flatMap(k=>[k, ...k.all()]); }
+  match(sel){ const m=sel.match(/^([a-z]*)((?:\.[\w-]+)*)/); const tag=m[1], cs=m[2].split('.').filter(Boolean); return (!tag||this.tag===tag) && cs.every(c=>this.cls().includes(c)); }
+  querySelectorAll(sel){ return this.all().filter(n=>n.match(sel)); } querySelector(sel){ return this.querySelectorAll(sel)[0]||null; }
+  addEventListener(){} closest(){ return null; } }
+const byId = {};
+for (const id of ['messages','rows','viewer','viewer-title','viewer-sent','viewer-back','viewer-applied','viewer-raw-request','viewer-raw-response','key-info','key-status','model-status','avg-ms','total-baht','total-turns','composer']) byId[id]=new N('div');
+byId.composer.append(new N('input'), Object.assign(new N('span'),{className:'helper'})); byId.composer.dataset.state='ready';
+var document = { createElement:(t)=>new N(t), createTextNode:(t)=>Object.assign(new N('#text'),{own:t}),
+  querySelector:(sel)=>{ if (sel.startsWith('#')) { const [id, rest]=sel.slice(1).split(' '); const n=byId[id]??null; return rest&&n ? n.querySelector(rest) : n; } return null; },
+  querySelectorAll:(sel)=>Object.values(byId).flatMap(n=>n.querySelectorAll(sel.split('[')[0])), addEventListener(){} };
+var Node = N; const timers = []; var setTimeout = (f, ms)=>{ if (ms === POLL_MS) { timers.push(f); return timers.length; } f(); return 0; }; var clearTimeout = ()=>{};
+async function tick(){ const f = timers.shift(); if (f) await f(); }
+async function drain(){ while (timers.length) await tick(); }
+var sessionStorage = { setItem(){}, getItem(){ return ''; } };
+var location = { href: 'http://127.0.0.1:8768/', search: '' };
+const trail = [];
+var history = { state: null, replaceState(st, t, url){ trail.push(['replace', url]); location.href='http://127.0.0.1:8768'+url; location.search=url.includes('?')?'?'+url.split('?')[1].split('#')[0]:''; } };
+let answers = []; const states = [];
+var fetch = async (url, opts={}) => { trail.push([opts.method||'GET', url, opts.body ? JSON.parse(opts.body) : null]); states.push(byId.composer.dataset.state);
+  const a = answers.shift() || { status: 404, body: { error: 'no answer scripted' } };
+  return { ok: (a.status||200) < 400, status: a.status||200, json: async () => a.body }; };
+function at(url){ location.href='http://127.0.0.1:8768'+url; location.search=url.includes('?')?'?'+url.split('?')[1]:''; }
+function freshPage(){ CFG.rate.thb_per_usd = 34.9; fresh('s1'); trail.length=0; states.length=0; timers.length=0; answers=[]; }
+function item(n, text, masked=false){ const e = { turn_id: 'run-1-'+n, turn_no: n, batch: 'run-1', batch_n: n, outcome: 'matched', response_id: 'shipping', input: { kind: 'typed', text },
+  jev: { status: 200, intent: 'ask_shipping', confidence: 0.9, entities: {}, ms: 800 + n, cost_usd: 0.0002, t_sent: '2026-09-23T10:00:00.000Z', t_received: '2026-09-23T10:00:00.800Z' } };
+  return { entry: e, you: { who: 'you', text, kind: 'typed', masked }, bot: [{ who: 'bot', text: 'ค่าส่ง 40 บาทค่ะ', buttons: [], variant: 'plain', response_id: 'shipping' }],
+    raw: { request: { state: { customer_said: text, shop_said: 'hi', history: [] }, questions: { intent: {} } }, response: { id: 'gen-'+n } } }; }
+function screen(){ return { you: byId.messages.children.filter(n => n.cls().includes('you')).map(n => [n.getAttribute('data-testid'), n.textContent, n.getAttribute('data-masked')]),
+  bot: byId.messages.children.filter(n => n.cls().includes('bot')).map(n => n.getAttribute('data-testid')), bubbles: byId.messages.querySelectorAll('.bubble').length,
+  rows: byId.rows.children.map(r => r.getAttribute('data-testid') || r.className), turns: byId['total-turns'].textContent, usd: byId['key-info'].getAttribute('data-total-usd'),
+  avg: byId['avg-ms'].textContent, composer: byId.composer.dataset.state, input_disabled: byId.composer.querySelector('input').disabled, log: S.session.log.length, status: byId['key-status'].textContent }; }
+"""
+
+    def page(self, script):
+        """Run shared.js and speed.js in the fake page, then `script` (async); it prints JSON."""
+        if not shutil.which("node"):
+            self.skipTest("no node")
+        src = "".join((server.STATIC / "assets" / n).read_text(encoding="utf-8") + ";\n" for n in ("shared.js", "speed.js"))
+        body = self.PAGE_DOM + src + "(async () => {" + script + "})().catch((e) => { console.error(e.stack); process.exit(3); });"
+        prog = ("const vm=require('vm');const c={console,URL,URLSearchParams,process};vm.createContext(c);"
+                f"vm.runInContext({json.dumps(body)},c);")
+        r = subprocess.run(["node", "-e", prog], capture_output=True, text=True, timeout=20)
+        self.assertEqual(r.returncode, 0, r.stderr[-2000:])
+        return json.loads(r.stdout)
+
+    def test_run_starts_from_the_address_once(self):  # AC-2
+        out = self.page(
+            "const out = {};"
+            "freshPage(); at('/?run=100&fail=1'); answers=[{ body: { refused: false, run_id: 'run-1', state: 'running' } }, { body: { run_id: 'run-1', state: 'done', next: 0, items: [] } }];"
+            "await speedFromAddress(); out.hundred = trail.slice(0, 2); out.left = location.search;"
+            "freshPage(); at('/?run=1000'); answers=[{ body: { refused: false, run_id: 'run-2', state: 'running' } }, { body: { run_id: 'run-2', state: 'done', next: 0, items: [] } }];"
+            "await speedFromAddress(); out.thousand = trail[1];"
+            "out.other = []; for (const q of ['?run=10', '?run=1,000', '?run=abc', '?run=', '?run=100.0']) { freshPage(); at('/' + q); await speedFromAddress(); out.other.push(trail.slice()); }"
+            "freshPage(); at('/'); await speedFromAddress(); out.plain = trail.slice();"
+            "freshPage(); at('/'); await speedFromAddress(); out.reload = trail.slice();"
+            "console.log(JSON.stringify(out));")
+        # ?run= leaves the address first, then the one POST asks for the run on the page's session
+        self.assertEqual(out["hundred"], [["replace", "/?fail=1"], ["POST", "/api/run", {"session_id": "s1", "target": 100}]])
+        self.assertEqual(out["left"], "?fail=1")
+        self.assertEqual(out["thousand"], ["POST", "/api/run", {"session_id": "s1", "target": 1000}])
+        for trail in out["other"]:                                   # any other value: dropped, nothing asked
+            self.assertEqual([t[0] for t in trail], ["replace"], trail)
+        self.assertEqual((out["plain"], out["reload"]), ([], []))    # `/` and a reload of it ask for nothing
+
+    def test_refused_run_shows_the_cap_line_and_streams_nothing(self):  # AC-5
+        out = self.page(
+            "freshPage(); updateKeyInfo(); at('/?run=100');"
+            "answers=[{ body: { refused: true, outcome: 'cap_reached', model_status: 'cap', estimate_usd: 0.02, room_usd: 0.00098 } }];"
+            "await speedFromAddress();"
+            "console.log(JSON.stringify({ trail, status: document.querySelector('#key-status').textContent,"
+            " badge: document.querySelector('#model-status').getAttribute('data-status'), turns: document.querySelector('#total-turns').textContent,"
+            " rows: byId.rows.children.map(r => r.className), bubbles: byId.messages.children.length, composer: byId.composer.dataset.state }));")
+        self.assertEqual([t[:2] for t in out["trail"]], [["replace", "/"], ["POST", "/api/run"]])   # no GET: nothing streams
+        self.assertEqual((out["status"], out["badge"], out["turns"]), ("● spend cap reached", "cap", "0"))
+        self.assertEqual((out["rows"], out["bubbles"], out["composer"]), (["empty"], 0, "ready"))
+
+
+    def test_run_streams_on_the_same_screen(self):  # AC-3
+        out = self.page(
+            "freshPage(); at('/?run=100');"
+            "answers=[{ body: { refused: false, run_id: 'run-1', state: 'running' } },"
+            " { body: { run_id: 'run-1', state: 'running', next: 2, items: [item(1, 'ค่าส่งเท่าไหร่คะ'), item(2, '[delivery details]', true)] } },"
+            " { body: { run_id: 'run-1', state: 'done', next: 3, items: [item(3, 'มีกาแฟอะไรบ้าง')] } }];"
+            "await speedFromAddress(); const during = screen(); await drain(); const after = screen();"
+            "S.session.raw['run-1-3'] && openViewer(3);"
+            "console.log(JSON.stringify({ trail, states, during, after, viewer: byId['viewer-sent'].textContent }));")
+        self.assertEqual([t[:2] for t in out["trail"]], [["replace", "/"], ["POST", "/api/run"],
+                                                         ["GET", "/api/run?session_id=s1&since=0"], ["GET", "/api/run?session_id=s1&since=2"]])
+        self.assertEqual(out["states"], ["ready", "judging", "judging"])       # disabled from the first ask to the end
+        d, a = out["during"], out["after"]
+        self.assertEqual((d["composer"], d["input_disabled"], d["turns"], d["rows"]), ("judging", True, "2", ["turn-2", "turn-1"]))
+        # the same chat column: customer bubble, then Beanly's prepared reply; masked text stays masked
+        self.assertEqual(a["you"], [["you-1", "ค่าส่งเท่าไหร่คะ", "false"], ["you-2", "[delivery details]", "true"], ["you-3", "มีกาแฟอะไรบ้าง", "false"]])
+        self.assertEqual(a["bot"], ["bot-run-1-1-1", "bot-run-1-2-1", "bot-run-1-3-1"])
+        # the same panel, newest first; the key-info block from the log; the composer ready at the end
+        self.assertEqual((a["rows"], a["turns"], a["log"], a["usd"], a["avg"]), (["turn-3", "turn-2", "turn-1"], "3", 3, "0.000600", "800 ms"))
+        self.assertEqual((a["composer"], a["input_disabled"], a["status"]), ("ready", False, ""))
+        self.assertIn("customer_said|มีกาแฟอะไรบ้าง", out["viewer"])         # `open` on a run row shows its request
+
+    def test_start_over_during_a_run_stops_the_stream(self):  # AC-6
+        out = self.page(
+            "freshPage(); at('/?run=100');"
+            "answers=[{ body: { refused: false, run_id: 'run-1', state: 'running' } },"
+            " { body: { run_id: 'run-1', state: 'running', next: 1, items: [item(1, 'ค่าส่งเท่าไหร่คะ')] } },"
+            " { body: { ended: true, session_id: 's1' } },"
+            " { body: { session_id: 's2', new: true, turn_no: 0, transcript: [{ who: 'bot', id: 'm1', text: 'สวัสดีค่ะ Beanly นะคะ', buttons: [{ label: 'ดูเมล็ดกาแฟ', intent: 'browse' }] }], log: [], raw: {} } }];"
+            "await speedFromAddress(); const during = screen(); await startOver(); await drain();"
+            "console.log(JSON.stringify({ trail, during, after: screen(), id: S.session.id, running: speedRunning() }));")
+        self.assertEqual(out["during"]["composer"], "judging")
+        self.assertEqual([t[:2] for t in out["trail"]][-2:], [["POST", "/api/session/end"], ["GET", "/api/session?id="]])
+        self.assertEqual(sum(t[1].startswith("/api/run") for t in out["trail"]), 2)   # no ask after start-over; no second run
+        a = out["after"]
+        self.assertEqual((out["id"], out["running"], a["bot"], a["you"], a["rows"], a["turns"], a["composer"]),
+                         ("s2", False, ["bot-m1"], [], ["empty"], "0", "ready"))
+
+
+    def test_a_run_of_1000_keeps_the_dom_bounded(self):  # AC-4, AC-6 (reload)
+        out = self.page(
+            "freshPage(); at('/?run=1000');"
+            "answers=[{ body: { refused: false, run_id: 'run-1', state: 'running' } }];"
+            "for (let k = 0; k < 10; k++) answers.push({ body: { run_id: 'run-1', state: k < 9 ? 'running' : 'done', next: (k + 1) * 100,"
+            " items: Array.from({ length: 100 }, (_, i) => item(k * 100 + i + 1, 'ข้อความ ' + (k * 100 + i + 1))) } });"
+            "await speedFromAddress(); await drain(); const run = screen();"
+            "const firstYou = byId.messages.firstElementChild.getAttribute('data-testid'); const raw = Object.keys(S.session.raw).length;"
+            "const log = S.session.log.map(it => it);"
+            # a reload: the session view holds the chat's transcript (the greeting) and the whole log
+            "answers=[{ body: { session_id: 's1', new: false, turn_no: 1000, transcript: [{ who: 'bot', id: 'm1', text: 'สวัสดีค่ะ', buttons: [] }], log, raw: {} } }];"
+            "at('/'); await load('s1'); await speedFromAddress();"
+            "console.log(JSON.stringify({ run, firstYou, raw, reload: screen(), asked: trail.filter(t => t[1].startsWith('/api/run')).length }));")
+        run, reload = out["run"], out["reload"]
+        self.assertEqual((run["bubbles"], len(run["rows"]), run["rows"][0], run["rows"][-1]), (40, 50, "turn-1000", "turn-951"))
+        self.assertEqual(out["firstYou"], "you-981")                     # the newest 20 exchanges, starting on a customer bubble
+        self.assertEqual((run["turns"], run["log"], out["raw"], run["composer"]), ("1000", 1000, 50, "ready"))
+        self.assertEqual(run["usd"], f"{1000 * 0.0002:.6f}")
+        # reloaded after the run: the chat's own transcript, the totals of the whole log, the newest 50 rows, no run
+        self.assertEqual((reload["bot"], reload["you"], reload["turns"], len(reload["rows"]), reload["rows"][0], reload["rows"][-1]),
+                         (["bot-m1"], [], "1000", 50, "turn-1000", "turn-951"))
+        self.assertEqual(out["asked"], 11)                               # the run's POST and ten asks; nothing on reload
 
 
 if __name__ == "__main__":

@@ -13,7 +13,8 @@ inside the client's headers and is in no response.
 Story 2.1 adds the speed test's engine (`app/speed.py`): `POST /api/run {session_id, target}` starts a
 run on that session — or refuses it before its first call with `model_status: "cap"` — and
 `GET /api/run?session_id=&since=` reports it: counts, the items from `since` on, and once it has ended
-the recap figures for the recording driver. Nothing on the page reads them yet (Story 2.2, DR-010).
+the recap figures for the recording driver. Story 2.2's page starts a run from its address
+(`/?run=100`, `/?run=1000`) and streams the items on the chat screen; the recap is drawn nowhere (DR-010).
 """
 from __future__ import annotations
 

@@ -1,49 +1,82 @@
-/* Component library — the SpeedTest organism (05_components.md), as ruled 2026-09-22: it runs ON
-   the W-001 screen. A header popover chooses 100 / 1,000 and starts; the messages stream as chat,
-   the panel rows stream beside them, the key-info block counts, one status line sits above the
-   composer. The prototype simulated the run from Spike S-4's shape over the fixture phrases; the
-   fixtures left with Story 1.3b and the real run — real requests through the server — is Epic 2's.
-   Until then every token is mounted and `Start` says so. */
+/* The speed test on the same screen (FR26, DR-010). It adds nothing to the page: no control, no
+   status line, no element of its own. It is started from the address — `/?run=100` to rehearse,
+   `/?run=1000` to record — and streams through the chat's own bubbles, rows and key-info block.
+   The server runs it (Story 2.1: `POST /api/run`, `GET /api/run`); the recap's figures stay there. */
 "use strict";
-const SPEED = { target: 100, phase: "ready", answered: 0, correct: 0, errors: 0, usd: 0, t0: 0, elapsed: 0, timer: null };
-const NOT_WIRED = "not wired until Epic 2";
 
-function speedMount() {
-  const header = $(".chat-header"); const spacer = header.querySelector(".spacer");
-  const pop = el("div", { class: "speed-pop", id: "speed-pop", "data-testid": "speed-pop", hidden: "" },
-    el("div", { class: "chooser", id: "speed-chooser", "data-testid": "speed-chooser" },
-      el("button", { class: "opt pressed", "data-n": "100", "data-testid": "speed-target-100", text: "100 rehearsal", onclick: () => speedChoose(100) }),
-      el("button", { class: "opt", "data-n": "1000", "data-testid": "speed-target-1000", text: "1,000 demo", onclick: () => speedChoose(1000) })),
-    el("div", { class: "note", text: `messages from the intent catalogue's test set · 32 in flight · full catalogue each — ${NOT_WIRED}` }),
-    el("button", { class: "btn-start", id: "speed-start", "data-testid": "speed-start", text: "Start", onclick: speedStart }));
-  const btn = el("button", { class: "btn-quiet", id: "speed-test-open", "data-testid": "speed-test-open", text: "speed test ▾", onclick: () => { pop.hidden = !pop.hidden; } });
-  spacer.after(btn); header.append(pop);
-  const status = el("div", { class: "speed-status", id: "speed-status", "data-testid": "speed-test", "data-phase": "ready", hidden: "" },
-    el("span", { id: "speed-count", "data-testid": "speed-count" }), document.createTextNode(" / "), el("span", { id: "speed-target", "data-testid": "speed-target" }),
-    document.createTextNode(" · "), el("span", { id: "speed-elapsed", "data-testid": "speed-elapsed-ms" }), document.createTextNode(" · "), el("span", { id: "speed-per-s", "data-testid": "speed-per-s" }),
-    document.createTextNode(" · "), el("span", { id: "speed-correct", "data-testid": "speed-correct" }), el("span", { id: "speed-errors", "data-testid": "speed-errors" }),
-    el("span", { id: "speed-summary", "data-testid": "speed-summary" }));
-  $("#composer").before(status);
-  speedRender();
+const RUN_TARGETS = [100, 1000];
+const POLL_MS = 150;                     // how often the page asks for the answers that have arrived
+const KEEP_BUBBLES = 40;                 // the chat column keeps the newest 40 bubbles while a run streams
+const RUN = { id: "", session: "", next: 0, timer: 0, streaming: false, held: [] };
+
+/* The target the address asks for: exactly `100` or `1000`, anything else is no run. */
+function runTarget(search) {
+  const v = new URLSearchParams(search || "").get("run");
+  return RUN_TARGETS.find((n) => String(n) === v) || 0;
 }
-function speedChoose(n) { if (SPEED.phase === "running") return; SPEED.target = n; document.querySelectorAll("#speed-chooser .opt").forEach((o) => o.classList.toggle("pressed", +o.dataset.n === n)); speedRender(); }
-function speedRender() {
-  const st = $("#speed-status"); if (!st) return; const ph = SPEED.phase; st.dataset.phase = ph; st.hidden = ph === "ready";
-  const sec = (ms) => (ms / 1000).toFixed(1);
-  const elapsed = ph === "running" ? performance.now() - SPEED.t0 : SPEED.elapsed;
-  const set2 = (id, text, v) => { const n = $(id); n.textContent = text; n.setAttribute("data-value", v); };
-  set2("#speed-count", `speed test · ${SPEED.answered.toLocaleString()}`, SPEED.answered); set2("#speed-target", SPEED.target.toLocaleString(), SPEED.target);
-  set2("#speed-elapsed", `${sec(elapsed)} s`, Math.round(elapsed));
-  const perS = elapsed > 300 ? SPEED.answered / (elapsed / 1000) : 0; set2("#speed-per-s", `${perS.toFixed(0)}/s`, perS.toFixed(1));
-  set2("#speed-correct", `${SPEED.correct} ✓`, SPEED.correct); set2("#speed-errors", SPEED.errors ? ` · ${SPEED.errors} errors` : "", SPEED.errors);
-  $("#speed-summary").textContent = ph === "done" ? ` — ${SPEED.target.toLocaleString()} answered in ${sec(SPEED.elapsed)} s · ${(SPEED.target / (SPEED.elapsed / 1000)).toFixed(0)}/s · ${SPEED.correct} correct` : ph === "unwired" ? ` — ${NOT_WIRED}` : "";  // cost lives in KeyInfo, not here
-  const open = $("#speed-test-open"); if (open) open.disabled = ph === "running";
+/* `?run=` leaves the address before the run is asked for, so a reload or เริ่มใหม่ never starts a
+   second paid run. The rest of the address is kept. */
+function dropRunParam() {
+  const u = new URL(location.href);
+  if (!u.searchParams.has("run")) return false;
+  u.searchParams.delete("run");
+  history.replaceState(history.state, "", u.pathname + u.search + u.hash);
+  return true;
 }
-/* Epic 2 sends the real requests through the server. Here `Start` only shows the status line with
-   the note; nothing is sent, nothing is counted, the chat is left alone. */
-function speedStart() {
-  if (SPEED.phase === "running") return;
-  $("#speed-pop").hidden = true;
-  SPEED.phase = "unwired"; speedRender();
+async function speedFromAddress() {
+  const target = runTarget(location.search);
+  dropRunParam();
+  if (target && S.session) await speedStart(target);
 }
-function speedReset() { clearInterval(SPEED.timer); Object.assign(SPEED, { phase: "ready", answered: 0, correct: 0, errors: 0, usd: 0, elapsed: 0 }); speedRender(); }
+/* One run on the page's session. A refusal (the cap) shows the key-info block's own cap line and
+   nothing streams. */
+async function speedStart(target) {
+  const id = S.session.id; let r;
+  try { r = await unwrap(await fetch("/api/run", post({ session_id: id, target }))); }
+  catch (e) { await failed(e); return; }
+  if (r.refused) { showStatus(null, { status: "cap", line: "● spend cap reached" }); fitViewer(); return; }
+  if (S.session?.id !== id) return;                          // started over while the run was asked for
+  Object.assign(RUN, { id: r.run_id, session: id, next: 0, streaming: true, held: [] });
+  setComposer("judging");                                    // the composer's own disabled state
+  await speedPoll();
+}
+/* The answers that arrived since the last ask, drawn as the chat draws a turn: the customer bubble,
+   Beanly's prepared reply, the row, the key-info block from the log. Until the run has ended. */
+async function speedPoll() {
+  if (!RUN.streaming) return;
+  const run = RUN.id; let p;
+  try { p = await unwrap(await fetch(`/api/run?session_id=${encodeURIComponent(RUN.session)}&since=${RUN.next}`, { cache: "no-store" })); }
+  catch (e) { if (RUN.id === run) speedStop(); console.warn("run", e); return; }
+  if (!RUN.streaming || RUN.id !== run || p.run_id !== run || S.session?.id !== RUN.session) return;
+  speedDraw(p.items || []); RUN.next = p.next;
+  if (p.state === "running") RUN.timer = setTimeout(speedPoll, POLL_MS); else speedStop();
+}
+function speedDraw(items) {
+  const s = S.session;
+  for (const it of items) {
+    const e = it.entry;
+    you(it.you);
+    (it.bot || []).forEach((b, k) => bot({ ...b, id: `${e.turn_id}-${k + 1}` }));
+    s.log.push(e); s.turn_no = Math.max(s.turn_no, e.turn_no || 0);
+    if (it.raw) { s.raw[e.turn_id] = it.raw; RUN.held.push(e.turn_id); }
+    if (e.jev) addTurnRow(e, s.log.length);
+  }
+  while (RUN.held.length > KEEP_ROWS) delete s.raw[RUN.held.shift()];   // raw bodies only for the rows on screen
+  speedTrim();
+  if (items.length) updateKeyInfo();
+}
+/* The oldest bubbles leave the chat column, and a set of buttons whose bubble has gone goes with it. */
+function speedTrim() {
+  const m = $("#messages"); let n = m.querySelectorAll(".bubble").length;
+  while (n > KEEP_BUBBLES && m.firstElementChild) { if (m.firstElementChild.classList.contains("bubble")) n -= 1; m.firstElementChild.remove(); }
+  while (m.firstElementChild && !m.firstElementChild.classList.contains("bubble")) m.firstElementChild.remove();
+}
+/* The stream ends: the screen keeps the last chats and the totals; the composer is ready. */
+function speedStop() {
+  clearTimeout(RUN.timer);
+  if (!RUN.streaming) return;
+  RUN.streaming = false; setComposer("ready");
+}
+function speedRunning() { return RUN.streaming; }
+/* Start over (fresh): nothing more is drawn; the server has already stopped the run. */
+function speedReset() { clearTimeout(RUN.timer); Object.assign(RUN, { id: "", session: "", next: 0, streaming: false, held: [] }); }
