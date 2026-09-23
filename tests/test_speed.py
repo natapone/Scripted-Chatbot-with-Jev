@@ -331,6 +331,95 @@ class TokenTests(unittest.TestCase):
         self.assertEqual((old["avg_ms"], old["avg_jev_ms"], old["avg_input_tokens"], old["usd_per_input_mtok"]), (500, None, None, None))
 
 
+class FilledOrderReplyTests(unittest.TestCase):
+    """Story 2.6 — a run message whose case sits inside an order is answered as a shop holding that
+    order answers it (F-23): the prepared reply for each affected case type, from the labelled intent."""
+
+    AT = "2026-09-23T06:00:00.000Z"
+
+    def replies(self, n):
+        c = CASES[n - 1]
+        cs = testset.build_session(c, FLOW)
+        v = turn.Verdict("matched", {}, None, intent=c["intent"], entities=dict(c["entities"]))
+        v.sku, v.product_from = turn.resolve_product(cs, v.entities)
+        masked = c["intent"] == "give_delivery_details"
+        return speed.prepared_reply(FLOW, cs, v, c["text"], self.AT, masked)
+
+    def ids(self, n):
+        return [b["response_id"] for b in self.replies(n)]
+
+    def test_each_affected_case_type_gets_the_next_step(self):  # AC-2, AC-3, AC-4
+        expect = {
+            106: ["confirm"], 107: ["confirm"], 108: ["confirm"],                     # address → the read-back
+            93: ["done"], 94: ["done"], 121: ["done"],                                # confirmed → the order code
+            88: ["change_order", "promo.offer"], 120: ["change_order", "confirm"],    # changed at the read-back
+            100: ["deny"],                                                            # not yet → what to change
+            45: ["ask_delivery"], 46: ["ask_delivery"],                               # payment → the address
+            42: ["promo.offer"], 124: ["ask_payment"],                                # bags → promotion / payment
+            96: ["promo.taken", "ask_payment"], 97: ["promo.taken", "ask_payment"],   # promotion taken
+            98: ["promo.declined", "ask_payment"], 101: ["promo.declined", "ask_payment"],
+            95: ["ask_quantity"],                                                     # the product taken → bags
+            80: ["view_order", "ask_payment"], 83: ["view_order", "ask_payment"],     # the order read out
+            84: ["change_order", "ask_payment"], 86: ["change_order", "ask_delivery"],
+            85: ["change_order", "promo.offer"], 87: ["change_order"],
+            89: ["cancel_order"], 92: ["cancel_order"],
+        }
+        for n, ids in expect.items():
+            with self.subTest(n=n):
+                got = self.replies(n)
+                self.assertEqual([b["response_id"] for b in got], ids)
+                texts = " ".join(b["text"] for b in got)
+                self.assertNotIn("ask_brew", [b["response_id"] for b in got])
+                self.assertNotIn(turn.NO_ORDER, texts)
+
+    def test_the_texts_are_the_shops(self):  # AC-2, AC-3
+        rb = self.replies(106)[0]                      # the read-back, the address masked
+        self.assertEqual(rb["variant"], "read-back")
+        self.assertIn("เฮาส์เบลนด์ × 2 ถุง — 700 บาท", rb["text"])
+        self.assertIn("รวม 800 บาท", rb["text"])
+        self.assertIn(f"จัดส่งที่: {turn.MASK_FOR_JEV}", rb["text"])
+        self.assertNotIn(CASES[105]["text"], rb["text"])
+        for n in (107, 108):
+            self.assertFalse(any(CASES[n - 1]["text"] in b["text"] for b in self.replies(n)))
+        done = self.replies(93)[0]["text"]
+        self.assertTrue(done.startswith("ขอบคุณคุณพี่มากค่ะ ☕ รหัสออเดอร์ BEAN-2609-"), done)
+        self.assertIn(turn.CONFIRMED_TRANSFER, done)
+        self.assertIn("เกอิชา", self.replies(121)[0]["text"] + CASES[120]["shop_said"])
+        changed = self.replies(120)
+        self.assertEqual(changed[0]["text"], turn.CHANGED)
+        self.assertIn("เฮาส์เบลนด์ × 3 ถุง — 1,050 บาท", changed[1]["text"])
+        self.assertEqual(self.replies(80)[0]["variant"], "read-back")
+        self.assertEqual(self.replies(89)[0]["text"], turn.strip_text(turn.flow_intent(FLOW, "cancel_order")["response"]))
+
+    def test_a_run_answers_the_delivery_messages_with_the_read_back(self):  # AC-1, AC-2
+        picked = [CASES[n - 1] for n in (106, 107, 108, 93, 88, 45, 96, 80)]
+        conn = labelled()
+        r = Rig(self, conn, cases=picked)
+        _, run = r.run(len(picked))
+        self.assertEqual(run.state, "done")
+        # the requests Jev received are byte-identical to the order-less sessions' (Story 2.1's)
+        for c in picked:
+            sent = next(b for b in conn.log["sent"] if b["state"]["customer_said"] == c["text"])
+            before = turn.build_request(testset.build_session(c, FLOW, filled=False), c["text"], FLOW)
+            self.assertEqual(json.dumps(sent, ensure_ascii=False, sort_keys=True),
+                             json.dumps(before, ensure_ascii=False, sort_keys=True))
+        # the item for picked[k]: row n sends picked[case_index(n - 1)] (the set is cycled with a stride)
+        by = {picked[speed.case_index(i["entry"]["batch_n"] - 1, len(picked))]["n"]: i for i in run.items}
+        for n in (106, 107, 108):                      # the three delivery messages
+            it = by[n]
+            self.assertEqual(it["you"]["text"], turn.MASK_FOR_LOG)
+            self.assertEqual([b["response_id"] for b in it["bot"]], ["confirm"])
+            self.assertEqual(it["entry"]["response_id"], "confirm")
+            self.assertFalse(any(d in b["text"] for d in DELIVERY for b in it["bot"]))
+        self.assertEqual(by[93]["bot"][0]["response_id"], "done")
+        self.assertEqual(by[45]["bot"][0]["response_id"], "ask_delivery")
+        self.assertEqual(run.correct, len(picked))     # scored as before: the label, the loop's intent
+        s = r.store.get(r.s.session_id)                # the presenter's session still holds no order
+        self.assertEqual((s.order, s.contexts), (session.empty_order(), {}))
+        for d in DELIVERY:
+            self.assertNotIn(d, r.snapshot_text())
+
+
 class RouteTests(unittest.TestCase):
     """`POST /api/run` and `GET /api/run` over loopback; Jev is the labelled fake."""
 
