@@ -129,3 +129,25 @@ reads `— · ฿0.000 · 0`, no panel rows.
 ## Sign-off
 
 `Walked: [ ]  ·  by: ______  ·  date: ______  ·  Result: ______`
+
+## Deltas
+
+Appended by Story 1.6's dry walk (2026-09-23, `memory/project/results/walk-dry-epic-1.md`). No row
+above was edited; findings F-13 and F-2 carry the corrections to `orb4b-triage`.
+
+- **The port (F-2):** 8765 and 8766 are held by other processes on this machine. Start with
+  `PORT=8768 python3.11 -m app` and walk `http://127.0.0.1:8768`; the ready line then reads
+  `ready · warm-up 200 · http://127.0.0.1:8768`. `.env` holds only the key today — add
+  `THB_PER_USD` and `RATE_DATE` there, or pass them in the environment, or the cold start refuses.
+- **1.9's count:** `masked entries` is **1 + the failed calls** on the session. A typed address whose
+  call fails (MODEL FAILED, or the cap) is masked too (Story 1.5, F-8), so a session with two failed
+  address turns reads `masked entries: 3`. On a clean path it is 1, as the row says.
+- **32 step rows, not 31:** § 4 has three (4.1–4.3); the Epic's Walkability counted two.
+- **1.1:** the brew question has **three** buttons, not four (the catalogue's `brew` options).
+- **1.10:** TOTAL TURNS reads **9** on the path above (5 clicks + 4 typed). The model id `jev-1.13`
+  in the panel header is light-on-light and hard to read (F-10, open).
+- **2.1:** the row carries **five** values — Jev also reads `brew espresso_milk · roast dark` off the
+  product's name; the three the row names are all there.
+- **3.6:** after 3.5b's hesitation the reply offers เปลี่ยนสินค้า · เปลี่ยนจำนวน · เปลี่ยนวิธีชำระ and
+  the read-back's **ยืนยัน** is no longer live (the prototype does the same). **Type ยืนยันค่ะ** — it
+  is a matched `affirm` and gives the order code.
