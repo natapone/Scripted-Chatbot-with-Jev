@@ -112,8 +112,8 @@ function modelStatus(log) {
   if (e?.outcome === "cap_reached") return { status: "cap", line: "● spend cap reached" };
   return { status: "live", line: "" };
 }
-function showStatus(log) {
-  const m = modelStatus(log); const b = $("#model-status"); const st = $("#key-status");
+function showStatus(log, m = modelStatus(log)) {
+  const b = $("#model-status"); const st = $("#key-status");
   if (b) { b.className = `badge ${m.status}`; b.textContent = m.status; b.setAttribute("data-status", m.status); }
   if (st) st.textContent = m.line;
 }

@@ -337,5 +337,85 @@ var Node = N; var setTimeout = (f)=>f();
         self.assertNotIn("setInterval", served["speed.js"])        # no simulated run
 
 
+    # Story 2.2 — the run client, driven in a DOM just big enough for the chat's own functions:
+    # elements with parents and children, class selectors, the composer, a fetch that records
+    # every call and answers from a script, and an address bar with history.replaceState.
+    PAGE_DOM = r"""
+class N { constructor(tag){ this.tag=tag; this.kids=[]; this.attrs={}; this.style={}; this.own=''; this.className=''; this.parent=null; this.dataset={}; this.disabled=false; this.offsetHeight=96; this.offsetWidth=1; this.scrollTop=0; this.scrollHeight=0;
+    const self=this; this.classList={ add(c){ if(!self.cls().includes(c)) self.className=(self.className+' '+c).trim(); }, remove(c){ self.className=self.cls().filter(x=>x!==c).join(' '); }, contains(c){ return self.cls().includes(c); } }; }
+  cls(){ return String(this.className||'').split(/\s+/).filter(Boolean); }
+  get textContent(){ return this.own + this.kids.map(k=>k.textContent).join('|'); } set textContent(t){ this.own=String(t); this.kids=[]; }
+  setAttribute(k,v){ this.attrs[k]=String(v); } getAttribute(k){ return this.attrs[k] ?? null; } removeAttribute(k){ delete this.attrs[k]; }
+  append(...xs){ for (let x of xs){ if (typeof x==='string') x=Object.assign(new N('#text'),{own:x}); x.parent=this; this.kids.push(x); } }
+  prepend(x){ x.parent=this; this.kids.unshift(x); } replaceChildren(...xs){ this.kids=[]; this.append(...xs); }
+  remove(){ if (this.parent) { this.parent.kids=this.parent.kids.filter(k=>k!==this); this.parent=null; } }
+  get children(){ return this.kids.filter(k=>k.tag!=='#text'); } get firstElementChild(){ return this.children[0]||null; } get lastElementChild(){ const c=this.children; return c[c.length-1]||null; }
+  all(){ return this.children.flatMap(k=>[k, ...k.all()]); }
+  match(sel){ const m=sel.match(/^([a-z]*)((?:\.[\w-]+)*)/); const tag=m[1], cs=m[2].split('.').filter(Boolean); return (!tag||this.tag===tag) && cs.every(c=>this.cls().includes(c)); }
+  querySelectorAll(sel){ return this.all().filter(n=>n.match(sel)); } querySelector(sel){ return this.querySelectorAll(sel)[0]||null; }
+  addEventListener(){} closest(){ return null; } }
+const byId = {};
+for (const id of ['messages','rows','viewer','viewer-title','viewer-sent','viewer-back','viewer-applied','viewer-raw-request','viewer-raw-response','key-info','key-status','model-status','avg-ms','total-baht','total-turns','composer']) byId[id]=new N('div');
+byId.composer.append(new N('input'), Object.assign(new N('span'),{className:'helper'})); byId.composer.dataset.state='ready';
+var document = { createElement:(t)=>new N(t), createTextNode:(t)=>Object.assign(new N('#text'),{own:t}),
+  querySelector:(sel)=>{ if (sel.startsWith('#')) { const [id, rest]=sel.slice(1).split(' '); const n=byId[id]??null; return rest&&n ? n.querySelector(rest) : n; } return null; },
+  querySelectorAll:(sel)=>Object.values(byId).flatMap(n=>n.querySelectorAll(sel.split('[')[0])), addEventListener(){} };
+var Node = N; var setTimeout = (f)=>{ f(); return 0; }; var clearTimeout = ()=>{};
+var sessionStorage = { setItem(){}, getItem(){ return ''; } };
+var location = { href: 'http://127.0.0.1:8768/', search: '' };
+const trail = [];
+var history = { state: null, replaceState(st, t, url){ trail.push(['replace', url]); location.href='http://127.0.0.1:8768'+url; location.search=url.includes('?')?'?'+url.split('?')[1].split('#')[0]:''; } };
+let answers = [];
+var fetch = async (url, opts={}) => { trail.push([opts.method||'GET', url, opts.body ? JSON.parse(opts.body) : null]);
+  const a = answers.shift() || { status: 404, body: { error: 'no answer scripted' } };
+  return { ok: (a.status||200) < 400, status: a.status||200, json: async () => a.body }; };
+function at(url){ location.href='http://127.0.0.1:8768'+url; location.search=url.includes('?')?'?'+url.split('?')[1]:''; }
+function freshPage(){ CFG.rate.thb_per_usd = 34.9; fresh('s1'); trail.length=0; answers=[]; }
+"""
+
+    def page(self, script):
+        """Run shared.js and speed.js in the fake page, then `script` (async); it prints JSON."""
+        if not shutil.which("node"):
+            self.skipTest("no node")
+        src = "".join((server.STATIC / "assets" / n).read_text(encoding="utf-8") + ";\n" for n in ("shared.js", "speed.js"))
+        body = self.PAGE_DOM + src + "(async () => {" + script + "})().catch((e) => { console.error(e.stack); process.exit(3); });"
+        prog = ("const vm=require('vm');const c={console,URL,URLSearchParams,process};vm.createContext(c);"
+                f"vm.runInContext({json.dumps(body)},c);")
+        r = subprocess.run(["node", "-e", prog], capture_output=True, text=True, timeout=20)
+        self.assertEqual(r.returncode, 0, r.stderr[-2000:])
+        return json.loads(r.stdout)
+
+    def test_run_starts_from_the_address_once(self):  # AC-2
+        out = self.page(
+            "const out = {};"
+            "freshPage(); at('/?run=100&fail=1'); answers=[{ body: { refused: false, run_id: 'run-1', state: 'running' } }, { body: { run_id: 'run-1', state: 'done', next: 0, items: [] } }];"
+            "await speedFromAddress(); out.hundred = trail.slice(0, 2); out.left = location.search;"
+            "freshPage(); at('/?run=1000'); answers=[{ body: { refused: false, run_id: 'run-2', state: 'running' } }, { body: { run_id: 'run-2', state: 'done', next: 0, items: [] } }];"
+            "await speedFromAddress(); out.thousand = trail[1];"
+            "out.other = []; for (const q of ['?run=10', '?run=1,000', '?run=abc', '?run=', '?run=100.0']) { freshPage(); at('/' + q); await speedFromAddress(); out.other.push(trail.slice()); }"
+            "freshPage(); at('/'); await speedFromAddress(); out.plain = trail.slice();"
+            "freshPage(); at('/'); await speedFromAddress(); out.reload = trail.slice();"
+            "console.log(JSON.stringify(out));")
+        # ?run= leaves the address first, then the one POST asks for the run on the page's session
+        self.assertEqual(out["hundred"], [["replace", "/?fail=1"], ["POST", "/api/run", {"session_id": "s1", "target": 100}]])
+        self.assertEqual(out["left"], "?fail=1")
+        self.assertEqual(out["thousand"], ["POST", "/api/run", {"session_id": "s1", "target": 1000}])
+        for trail in out["other"]:                                   # any other value: dropped, nothing asked
+            self.assertEqual([t[0] for t in trail], ["replace"], trail)
+        self.assertEqual((out["plain"], out["reload"]), ([], []))    # `/` and a reload of it ask for nothing
+
+    def test_refused_run_shows_the_cap_line_and_streams_nothing(self):  # AC-5
+        out = self.page(
+            "freshPage(); updateKeyInfo(); at('/?run=100');"
+            "answers=[{ body: { refused: true, outcome: 'cap_reached', model_status: 'cap', estimate_usd: 0.02, room_usd: 0.00098 } }];"
+            "await speedFromAddress();"
+            "console.log(JSON.stringify({ trail, status: document.querySelector('#key-status').textContent,"
+            " badge: document.querySelector('#model-status').getAttribute('data-status'), turns: document.querySelector('#total-turns').textContent,"
+            " rows: byId.rows.children.map(r => r.className), bubbles: byId.messages.children.length, composer: byId.composer.dataset.state }));")
+        self.assertEqual([t[:2] for t in out["trail"]], [["replace", "/"], ["POST", "/api/run"]])   # no GET: nothing streams
+        self.assertEqual((out["status"], out["badge"], out["turns"]), ("● spend cap reached", "cap", "0"))
+        self.assertEqual((out["rows"], out["bubbles"], out["composer"]), (["empty"], 0, "ready"))
+
+
 if __name__ == "__main__":
     unittest.main()
