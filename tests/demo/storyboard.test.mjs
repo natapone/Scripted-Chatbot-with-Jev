@@ -132,13 +132,14 @@ test("mergeChapters offsets session 2 by session 1's duration and re-derives sec
 });
 
 test("renderYoutube is Thai, starts at 0:00, uses the stamps after it, and reads every figure", () => {
-  const md = renderYoutube({
+  const md = renderYoutube({ sentence: "It picked the step, fast and cheap.",
     chapters: [{ title: "One Thai sales chat", mmss: "0:01" }, { title: "A hundred chats at once", mmss: "2:35" }],
     recap: RECAP, chat: { typedTurns: 5, totalThb: 0.0301 }, model: "typesafe/jev-1.13", rateDate: "2026-09-23", thbPerUsd: 33.17,
   });
   assert.match(md, /## ชื่อคลิป/); assert.match(md, /## แท็ก/);
   assert.match(md, /^0:00 แชทขายภาษาไทยหนึ่งบทสนทนา \(One Thai sales chat\)$/m);
   assert.match(md, /^2:35 ร้อยแชทพร้อมกัน/m);
+  assert.match(md, /^"It picked the step, fast and cheap\."$/m);
   assert.match(md, /100 แชทใน 3\.2 วินาที/); assert.match(md, /฿0\.58 \(\$0\.0175\)/); assert.match(md, /฿0\.030/);
 });
 

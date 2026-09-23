@@ -21,6 +21,9 @@
  * - `stage.legible()`: the full check on demand, at a dense frame the driver chooses, returning the
  *   measure so the ledger can quote it.
  * - `callout(…, { holdMs })`: a longer hold than the reading-speed floor, for the storyboard's pace.
+ * - `callout(…, { beside })`: the bubble sits outside a container (a panel row, the key-info block)
+ *   on the chosen side, and the arrow's dot lands on that container's edge level with the anchor —
+ *   so neither the bubble nor the dot covers a figure of the thing it points at.
  */
 import { expect, type BrowserContext, type Locator, type Page } from '@playwright/test';
 import { execFileSync } from 'child_process';
@@ -327,14 +330,17 @@ export async function openStage(page: Page, opts: StageOptions) {
      */
     async callout(anchor: string | Locator, text: string,
                   o: { spotlight?: boolean; side?: 'right' | 'left' | 'top' | 'bottom';
-                       poster?: boolean; holdMs?: number } = {}) {
+                       poster?: boolean; holdMs?: number; beside?: string } = {}) {
       const loc = typeof anchor === 'string' ? page.locator(anchor).first() : anchor;
       await loc.scrollIntoViewIfNeeded().catch(() => {});
       const box = await loc.boundingBox();
       if (!box) throw new Error(`callout anchor is not on screen: ${String(anchor)}`);
+      // [local] beside: the container the bubble and the dot stay outside of.
+      const outer = o.beside ? await page.locator(o.beside).first().boundingBox() : null;
+      if (o.beside && !outer) throw new Error(`callout container is not on screen: ${o.beside}`);
       if (!STAGE_ON) return;
 
-      await page.evaluate(({ box, text, side, spot, S, font, k }) => {
+      await page.evaluate(({ box, outer, text, side, spot, S, font, k }) => {
         const root = document.getElementById('stage-root');
         if (!root) return;
         const wrap = document.createElement('div');
@@ -360,11 +366,15 @@ export async function openStage(page: Page, opts: StageOptions) {
         wrap.appendChild(bub);
 
         const gap = 44;
-        const r = bub.getBoundingClientRect();
-        let x = box.x + box.width + gap, y = box.y + box.height / 2 - r.height / 2;
-        if (side === 'left') x = box.x - gap - r.width;
-        if (side === 'top') { x = box.x + box.width / 2 - r.width / 2; y = box.y - gap - r.height; }
-        if (side === 'bottom') { x = box.x + box.width / 2 - r.width / 2; y = box.y + box.height + gap; }
+        // [local] The layout size, not the drawn one: the bubble enters at scale(.9), so its drawn
+        // box is 10 % small and at full size it grew over the thing it was placed beside.
+        const r = { width: bub.offsetWidth, height: bub.offsetHeight };
+        // [local] Placed against the container when one is given, level with the anchor.
+        const c = outer || box;
+        let x = c.x + c.width + gap, y = box.y + box.height / 2 - r.height / 2;
+        if (side === 'left') x = c.x - gap - r.width;
+        if (side === 'top') { x = box.x + box.width / 2 - r.width / 2; y = c.y - gap - r.height; }
+        if (side === 'bottom') { x = box.x + box.width / 2 - r.width / 2; y = c.y + c.height + gap; }
         x = Math.max(S.safeX, Math.min(x, innerWidth - S.safeX - r.width));
         y = Math.max(S.safeY, Math.min(y, innerHeight - S.safeY - r.height));
 
@@ -392,8 +402,15 @@ export async function openStage(page: Page, opts: StageOptions) {
 
         // The arrow: from the bubble's nearest edge to the nearest point of the anchor.
         const bx = x + r.width / 2, by = y + r.height / 2;
-        const ax = Math.max(box.x, Math.min(bx, box.x + box.width));
-        const ay = Math.max(box.y, Math.min(by, box.y + box.height));
+        let ax = Math.max(box.x, Math.min(bx, box.x + box.width));
+        let ay = Math.max(box.y, Math.min(by, box.y + box.height));
+        if (outer) {   // [local] the dot on the container's edge, level with the anchor's middle
+          const mx = box.x + box.width / 2, my = box.y + box.height / 2;
+          if (side === 'left') { ax = outer.x - 8; ay = my; }
+          if (side === 'right') { ax = outer.x + outer.width + 8; ay = my; }
+          if (side === 'top') { ax = mx; ay = outer.y - 4; }
+          if (side === 'bottom') { ax = mx; ay = outer.y + outer.height + 4; }
+        }
         const ux = (ax - bx), uy = (ay - by), len = Math.hypot(ux, uy) || 1;
         const sx = bx + (ux / len) * Math.min(r.width / 2 + 4, len);
         const sy = by + (uy / len) * Math.min(r.height / 2 + 4, len);
@@ -405,7 +422,7 @@ export async function openStage(page: Page, opts: StageOptions) {
         wrap.insertBefore(svg, bub);
 
         requestAnimationFrame(() => { bub.style.transform = 'scale(1)'; bub.style.opacity = '1'; });
-      }, { box, text, side: o.side ?? 'right', spot: !!o.spotlight, S: SIZE, font: FONT(lang),
+      }, { box, outer, text, side: o.side ?? 'right', spot: !!o.spotlight, S: SIZE, font: FONT(lang),
            k: ui() })
         .catch(() => {});
 

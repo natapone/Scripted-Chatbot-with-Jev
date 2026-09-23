@@ -19,7 +19,8 @@
  *
  * Options: `--session 1|2|both` (default both; a lone session 2 assembles the deliverables when the
  * same mode's session 1 is already on disk), `--port 8768`, `--demo demos/developers-2026-09-23`,
- * `--assemble` (rebuild the deliverables from the sessions on disk, no browser, no call).
+ * `--assemble` (rebuild the deliverables from the sessions on disk, no browser, no call),
+ * `--cards [--stills <dir>]` (draw the recap and end cards from the recap on disk, no server, no call).
  *
  * A Jev failure, a timed-out call, a refused run or a run with errors stops the pass whole: the
  * session's video is discarded and nothing is assembled from it. Never resumed, never spliced.
@@ -65,8 +66,9 @@ const SESSION_OF = (n: number) => (n <= 3 ? 1 : 2);   // storyboard § 5–6: ch
 /** Where each callout fires: after the step whose result it points at (storyboard §§ 5–7). A callout
  *  with no cue fires after the chapter's last step. The wording stays in the storyboard. */
 const CUES: Record<number, string[]> = { 1: ['1.4'], 2: ['2.4', '2.5'], 3: ['3.4'], 4: ['4.2', '4.2'], 5: ['5.1'] };
-/** The pace (storyboard § 4: "a short hold after each Jev answer so the row can be read"), in ms. */
-const HOLD = { jev: 4200, click: 2000, callout: 5000, chapterEnd: 3500 };
+/** The pace (storyboard § 4: "a short hold after each Jev answer so the row can be read"), in ms.
+ *  About 6 s after each Jev answer; the rest scaled so session 1 runs about 140–160 s. */
+const HOLD = { jev: 6000, click: 4000, callout: 8000, chapterEnd: 6000 };
 /** The cards' type. Single quotes inside: it goes into double-quoted style attributes. A `font`
  *  shorthand whose family is `inherit` is invalid and silently dropped (the cards drew at 16 px). */
 const CARD_FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, system-ui, sans-serif";
@@ -105,6 +107,42 @@ async function stopServer(child: ChildProcess) {
   if (child.exitCode !== null) return;
   child.kill('SIGINT');
   await new Promise((r) => { const t = setTimeout(() => { child.kill('SIGKILL'); r(null); }, 5000); child.on('exit', () => { clearTimeout(t); r(null); }); });
+}
+
+// ---------------------------------------------------------------- the two cards (video overlays)
+
+/** Chapter 5's recap card, opaque, over the last frame of the run. */
+async function drawRecapCard(page: any, figs: any[], heading: string) {
+  await page.evaluate(({ figs, heading, font }) => {
+    const root = document.getElementById('stage-root'); if (!root) return;
+    const card = document.createElement('div'); card.id = 'stage-recap';
+    card.style.cssText = 'position:fixed;left:120px;top:150px;width:1000px;box-sizing:border-box;padding:40px 48px;' +
+      'background:#0b0f16;color:#fff;border-radius:18px;box-shadow:0 20px 60px rgba(0,0,0,.45);' +
+      `font-family:${font};opacity:0;transition:opacity .4s`;
+    card.innerHTML = `<div style="font:600 30px/1.2 ${font};color:#fbbf24;letter-spacing:.02em;margin-bottom:28px">${heading}</div>` +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:26px 48px">' +
+      figs.map((f: any) => `<div data-recap="${f.key}"><div style="font:500 24px/1.2 ${font};color:#94a3b8">${f.label}</div>` +
+        `<div style="font:700 42px/1.2 ${font};margin-top:6px;white-space:nowrap">${f.value}</div></div>`).join('') + '</div>';
+    root.appendChild(card);
+    setTimeout(() => { card.style.opacity = '1'; }, 50);
+  }, { figs, heading, font: CARD_FONT });
+}
+
+/** The end card: the title and the one sentence (storyboard § 1), over the whole frame. */
+async function drawEndCard(page: any) {
+  await page.evaluate(({ title, sentence, font }) => {
+    const root = document.getElementById('stage-root'); if (!root) return;
+    const card = document.createElement('div'); card.id = 'stage-end';
+    card.style.cssText = 'position:fixed;inset:0;background:#0b0f16;color:#fff;display:flex;flex-direction:column;' +
+      'justify-content:center;align-items:flex-start;padding:0 154px;opacity:0;transition:opacity .4s;' +
+      `font-family:${font}`;
+    card.innerHTML = `<div style="font:700 76px/1.1 ${font};letter-spacing:-.01em">${title}</div>` +
+      '<div style="width:180px;height:3px;background:#fbbf24;margin:32px 0"></div>' +
+      `<div style="font:400 36px/1.4 ${font};color:#cbd5e1;max-width:30em">“${sentence}”</div>`;
+    root.appendChild(card);
+    const cur = document.getElementById('stage-cursor'); if (cur) cur.style.display = 'none';
+    setTimeout(() => { card.style.opacity = '1'; }, 50);
+  }, { title: sb.title, sentence: sb.sentence, font: CARD_FONT });
 }
 
 // ---------------------------------------------------------------- one session
@@ -199,19 +237,7 @@ async function runSession(n: 1 | 2) {
     const figs = recapFigures(recap);
     const heading = sizeWords('A thousand calls, read from the run', recap.calls);
     if (!STAGE_ON) return;
-    await page.evaluate(({ figs, heading, font }) => {
-      const root = document.getElementById('stage-root'); if (!root) return;
-      const card = document.createElement('div'); card.id = 'stage-recap';
-      card.style.cssText = 'position:fixed;left:120px;top:150px;width:1000px;box-sizing:border-box;padding:40px 48px;' +
-        'background:#0b0f16;color:#fff;border-radius:18px;box-shadow:0 20px 60px rgba(0,0,0,.45);' +
-        `font-family:${font};opacity:0;transition:opacity .4s`;
-      card.innerHTML = `<div style="font:600 30px/1.2 ${font};color:#fbbf24;letter-spacing:.02em;margin-bottom:28px">${heading}</div>` +
-        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:26px 48px">' +
-        figs.map((f: any) => `<div data-recap="${f.key}"><div style="font:500 24px/1.2 ${font};color:#94a3b8">${f.label}</div>` +
-          `<div style="font:700 42px/1.2 ${font};margin-top:6px;white-space:nowrap">${f.value}</div></div>`).join('') + '</div>';
-      root.appendChild(card);
-      setTimeout(() => { card.style.opacity = '1'; }, 50);
-    }, { figs, heading, font: CARD_FONT });
+    await drawRecapCard(page, figs, heading);
     await stage.pause(1200);
     // What the card shows is what the recap said: read it back off the frame.
     const shown = await page.evaluate(() => Object.fromEntries([...document.querySelectorAll('#stage-recap [data-recap]')]
@@ -223,19 +249,7 @@ async function runSession(n: 1 | 2) {
 
   async function endCard() {
     if (!STAGE_ON) return;
-    await page.evaluate(({ title, sentence, font }) => {
-      const root = document.getElementById('stage-root'); if (!root) return;
-      const card = document.createElement('div'); card.id = 'stage-end';
-      card.style.cssText = 'position:fixed;inset:0;background:#0b0f16;color:#fff;display:flex;flex-direction:column;' +
-        'justify-content:center;align-items:flex-start;padding:0 154px;opacity:0;transition:opacity .4s;' +
-        `font-family:${font}`;
-      card.innerHTML = `<div style="font:700 76px/1.1 ${font};letter-spacing:-.01em">${title}</div>` +
-        '<div style="width:180px;height:3px;background:#fbbf24;margin:32px 0"></div>' +
-        `<div style="font:400 36px/1.4 ${font};color:#cbd5e1;max-width:30em">“${sentence}”</div>`;
-      root.appendChild(card);
-      const cur = document.getElementById('stage-cursor'); if (cur) cur.style.display = 'none';
-      setTimeout(() => { card.style.opacity = '1'; }, 50);
-    }, { title: sb.title, sentence: sb.sentence, font: CARD_FONT });
+    await drawEndCard(page);
     await stage.pause(5000);
   }
 
@@ -247,10 +261,14 @@ async function runSession(n: 1 | 2) {
   }
 
   async function doCallout(c: { anchor: string; text: string }, chapterNo: number, first: boolean) {
-    // Above key-info (it is never covered); below a panel row, over the older rows, so the bubble
-    // never sits on the row it names; beside the viewer, over the chat.
-    const side = /key-info|total-baht/.test(c.anchor) ? 'top' : /viewer/.test(c.anchor) ? 'left' : 'bottom';
-    await stage.callout(c.anchor, sizeWords(c.text, RUN_SIZE), { side, poster: first, holdMs: HOLD.callout });
+    // Never over the figures it names. A key-info callout sits above the key-info block, its dot on
+    // the block's top edge; a panel-row callout sits beside the row, to its left over the chat
+    // column's edge, its dot in the gutter level with the named line; the viewer's, left of it.
+    const keyInfo = /key-info|total-baht/.test(c.anchor);
+    const row = /\.turn:first-child/.test(c.anchor) ? '[data-testid="panel"] .turn:first-child' : undefined;
+    const side = keyInfo ? 'top' : 'left';
+    const beside = keyInfo ? '[data-testid="key-info"]' : row;
+    await stage.callout(c.anchor, sizeWords(c.text, RUN_SIZE), { side, beside, poster: first, holdMs: HOLD.callout });
   }
 
   async function checkLegible(where: string) {
@@ -341,8 +359,13 @@ async function runSession(n: 1 | 2) {
       await fire(null);
       if (ch.n === 1) {
         const row = pathRows.find((r) => r.intents_in_scope);
-        const said = Number((ch.callouts[0]?.text.match(/(\d+) intents/) || [])[1]);
-        assertions.push({ ok: row?.intents_in_scope === said, claim: true, what: `claim: the "from ${said} intents" callout — the intents offered to Jev on the first typed turn (in scope + none)`, value: row?.intents_in_scope });
+        const m = ch.callouts[0]?.text.match(/(\d+) intents/);
+        if (m) {   // a count in frame is a claim, checked against the turn log
+          const said = Number(m[1]);
+          assertions.push({ ok: row?.intents_in_scope === said, claim: true, what: `claim: the "from ${said} intents" callout — the intents offered to Jev on the first typed turn (in scope + none)`, value: row?.intents_in_scope });
+        } else {
+          assertions.push({ ok: true, what: 'the intents offered to Jev on the first typed turn (in scope + none; the callout names no count)', value: row?.intents_in_scope });
+        }
       }
       if (ch.n === 3) await checkLegible('the end of chapter 3');
       await stage.pause(HOLD.chapterEnd);
@@ -440,7 +463,7 @@ function assemble() {
     sessions: s.map((x) => ({ session: x.session, query: x.query, duration: x.session === 1 ? durations[0] : durations[1] })),
     chapters: merged.chapters,
   }, null, 2));
-  fs.writeFileSync(path.join(OUT, 'youtube.md'), renderYoutube({ chapters: merged.chapters, recap: s[1].recap, chat: s[0].chat,
+  fs.writeFileSync(path.join(OUT, 'youtube.md'), renderYoutube({ sentence: sb.sentence, chapters: merged.chapters, recap: s[1].recap, chat: s[0].chat,
     model: cfg.model, rateDate: cfg.rate_date, thbPerUsd: cfg.thb_per_usd }));
   for (const f of fs.readdirSync(OUT).filter((f) => /\.(webm|mov|json|md)$/.test(f) && f !== 'ledger.md' && f !== 'storyboard.md')) {
     files.push({ name: f, bytes: fs.statSync(path.join(OUT, f)).size });
@@ -462,9 +485,35 @@ function assemble() {
 
 // ---------------------------------------------------------------- main
 
+/** `--cards`: draw the recap card and the end card over the mode's last frame of the run, from the
+ *  recap already on disk — no server, no call. For checking the cards after a change to them. */
+async function cards() {
+  const s2 = path.join(OUT, 'session-2');
+  const recap = JSON.parse(fs.readFileSync(path.join(s2, 'session.json'), 'utf8')).recap;
+  if (!recap) throw new Error(`no recap in ${path.relative(REPO, s2)}/session.json`);
+  const bg = path.join(s2, 'stills', 'ch4-run-end.png');
+  const out = path.resolve(REPO, opt('--stills', path.join(OUT, 'cards')));
+  fs.mkdirSync(out, { recursive: true });
+  const browser = await chromium.launch({ headless: true });
+  const page = await (await browser.newContext({ viewport: { width: W, height: H }, deviceScaleFactor: 1 })).newPage();
+  const url = fs.existsSync(bg) ? `data:image/png;base64,${fs.readFileSync(bg).toString('base64')}` : '';
+  await page.setContent(`<body style="margin:0;width:${W}px;height:${H}px;background:#f5f1ea ${url ? `url(${url})` : ''} no-repeat">` +
+                        '<div id="stage-root" style="position:fixed;inset:0"></div></body>');
+  await drawRecapCard(page, recapFigures(recap), sizeWords('A thousand calls, read from the run', recap.calls));
+  await page.waitForTimeout(800);
+  await page.screenshot({ path: path.join(out, 'recap-card.png') });
+  await drawEndCard(page);
+  await page.waitForTimeout(800);
+  await page.screenshot({ path: path.join(out, 'end-card.png') });
+  await browser.close();
+  console.log(`[demo] cards drawn from ${path.relative(REPO, s2)}'s recap → ${path.relative(REPO, out)}/recap-card.png, end-card.png`);
+}
+
 fs.mkdirSync(OUT, { recursive: true });
 if (flag('--assemble')) {
   assemble();
+} else if (flag('--cards')) {
+  await cards();
 } else {
   const which = SESSIONS === 'both' ? [1, 2] : [Number(SESSIONS)];
   let ok = true;

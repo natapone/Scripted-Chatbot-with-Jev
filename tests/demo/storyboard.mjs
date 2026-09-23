@@ -179,7 +179,7 @@ const TH_TITLES = {
 
 /** `youtube.md`, in Thai: title, description, the chapter list (from the merged chapters — the first
  *  line is 0:00 as YouTube requires, the rest are the stamps), and tags. Every figure is read. */
-export function renderYoutube({ chapters, recap, chat, model, rateDate, thbPerUsd }) {
+export function renderYoutube({ sentence, chapters, recap, chat, model, rateDate, thbPerUsd }) {
   const r = recap;
   const secs = fix(r.elapsed_ms / 1000, 1);
   const lines = chapters.map((c, i) => {
@@ -188,6 +188,7 @@ export function renderYoutube({ chapters, recap, chat, model, rateDate, thbPerUs
   });
   const title = `Jev คุมแชทขายภาษาไทยทั้งบทสนทนา — ${int(r.calls)} แชทใน ${secs} วินาที`;
   const desc = [
+    ...(sentence ? [`"${sentence}"`, ""] : []),
     `เดโมจริงของ Jev (${model}) บน OpenRouter: บอทขายเมล็ดกาแฟ "Beanly" ตอบลูกค้าเป็นภาษาไทย ทุกคำตอบเตรียมไว้ล่วงหน้า`,
     `Jev ไม่ได้เขียนคำตอบเอง แต่เลือกขั้นต่อไป (intent และค่าที่ลูกค้าบอก) จากแคตตาล็อกทั้งชุดในการเรียกครั้งเดียว`,
     "",
