@@ -246,6 +246,32 @@ class TextTests(unittest.TestCase):
         with self.assertRaises(KeyError):
             turn.flow_intent(FLOW, "nope")
 
+    def test_entity_buttons_are_one_option_each(self):  # F-16: the walk's W-2
+        # every entity-built button set names one option per button — no "หรือ", no "/"
+        for slot in ("brew", "roast"):
+            labels = [b["label"] for b in turn.option_buttons(FLOW, slot)]
+            self.assertEqual(len(labels), len(set(labels)), slot)
+            for label in labels:
+                self.assertNotIn("หรือ", label, slot)
+                self.assertNotIn("/", label, slot)
+                self.assertLessEqual(len(label.split()), 1, label)
+            # every label fills a key Jev knows
+            self.assertTrue({b["params"][slot] for b in turn.option_buttons(FLOW, slot)} <= set(FLOW.entities[slot]["options"]))
+        # an entity with no labels falls back to its option texts
+        self.assertNotIn("labels", FLOW.entities["payment"])
+        self.assertEqual([b["label"] for b in turn.option_buttons(FLOW, "payment")], list(FLOW.entities["payment"]["options"].values()))
+        # Jev still reads the long descriptions; `labels` never reaches the request
+        req = FLOW.build_request(None, "x", None, [], [])
+        self.assertEqual(req["questions"]["brew"]["criteria"]["espresso_milk"], FLOW.entities["brew"]["options"]["espresso_milk"])
+        self.assertNotIn("labels", json.dumps(req, ensure_ascii=False))
+        # clicking เมนูนม fills espresso_milk, no model call
+        r = Rig(self)
+        r.click({"label": "ช่วยแนะนำหน่อย", "intent": "ask_recommendation", "params": {}, "message_id": "m1"}, "c1")
+        res = r.click({"label": "เมนูนม", "intent": "inform", "params": {"brew": "espresso_milk"}, "message_id": "m3"}, "c2")
+        self.assertEqual(res["log_entry"]["applied"], [{"set": "recommend.brew", "to": "espresso_milk"}])
+        self.assertEqual(res["bot"][0]["text"], "ชอบคั่วระดับไหนคะ?")
+        self.assertEqual(r.conn.log["sent"], [])
+
 
 class RunTurnTests(unittest.TestCase):
     def test_matched_product_info_commits_whole(self):  # AC-3 and the traced turn 1
@@ -404,10 +430,12 @@ class RunTurnTests(unittest.TestCase):
         r2 = Rig(self)
         res = r2.click({"label": "ช่วยแนะนำหน่อย", "intent": "ask_recommendation", "params": {}, "message_id": "m1"}, "c1")
         self.assertEqual(res["bot"][0]["text"], "เยี่ยมเลยค่ะ — งั้นรบกวนถามต่ออีกนิดน้า จะได้ recommend ตรงค่ะ ปกติชงแบบไหนคะ?")
-        self.assertEqual([b["params"] for b in res["bot"][0]["buttons"]], [{"brew": "espresso_milk"}, {"brew": "filter"}, {"brew": "cold_brew"}])
+        self.assertEqual([(b["label"], b["params"]) for b in res["bot"][0]["buttons"]],
+                         [("เอสเปรสโซ่", {"brew": "espresso_milk"}), ("เมนูนม", {"brew": "espresso_milk"}),
+                          ("ดริป", {"brew": "filter"}), ("โคลด์บรูว์", {"brew": "cold_brew"})])
         self.assertEqual(r2.state().pending_prompt, {"slot": "brew", "context": "ask_brew", "params": {}, "message_id": "m3"})
         self.assertEqual(r2.state().contexts, {"ask_brew": {"expires_after_turn": 3, "params": {}}})
-        res = r2.click({"label": "ดริป pour-over เฟรนช์เพรส โมก้าพอต หรือกาแฟดำแบบ filter", "intent": "inform", "params": {"brew": "filter"}, "message_id": "m3"}, "c2")
+        res = r2.click({"label": "ดริป", "intent": "inform", "params": {"brew": "filter"}, "message_id": "m3"}, "c2")
         self.assertEqual((res["outcome"], res["log_entry"]["applied"]), ("matched", [{"set": "recommend.brew", "to": "filter"}]))
         self.assertEqual(r2.state().order["recommend"], {"brew": "filter", "roast": None})   # Story 1.4 writes it; the roast is asked next
         self.assertEqual(res["bot"][0]["text"], "ชอบคั่วระดับไหนคะ?")
@@ -522,12 +550,14 @@ class LeadTests(unittest.TestCase):
         # an empty form: the lead recommends — brew first, then roast, then the pair from the table
         turn.lead(s, FLOW, 1)
         self.assertEqual(s.transcript[-1]["text"], "เยี่ยมเลยค่ะ — งั้นรบกวนถามต่ออีกนิดน้า จะได้ recommend ตรงค่ะ ปกติชงแบบไหนคะ?")
-        self.assertEqual([b["params"] for b in s.transcript[-1]["buttons"]], [{"brew": "espresso_milk"}, {"brew": "filter"}, {"brew": "cold_brew"}])
+        self.assertEqual([b["params"] for b in s.transcript[-1]["buttons"]],
+                         [{"brew": "espresso_milk"}, {"brew": "espresso_milk"}, {"brew": "filter"}, {"brew": "cold_brew"}])
         self.assertEqual((s.pending_prompt["slot"], s.pending_prompt["context"], list(s.contexts)), ("brew", "ask_brew", ["ask_brew"]))
         s.order["recommend"]["brew"] = "filter"
         turn.lead(s, FLOW, 2)
         self.assertEqual(s.transcript[-1]["text"], "ชอบคั่วระดับไหนคะ?")
-        self.assertEqual([b["params"]["roast"] for b in s.transcript[-1]["buttons"]], ["light", "medium", "dark", "decaf"])
+        self.assertEqual([(b["label"], b["params"]["roast"]) for b in s.transcript[-1]["buttons"]],
+                         [("คั่วอ่อน", "light"), ("คั่วกลาง", "medium"), ("คั่วเข้ม", "dark"), ("ไม่มีคาเฟอีน", "decaf")])
         self.assertEqual(s.pending_prompt["slot"], "roast")
         s.order["recommend"]["roast"] = "light"
         turn.lead(s, FLOW, 3)
@@ -970,6 +1000,32 @@ class OrderTests(unittest.TestCase):
         r.store.commit(s)
         res = r.typed("มีโปรอะไรบ้าง", "t6")
         self.assertEqual([b["response_id"] for b in res["bot"]], ["ask_promotion", "resume:quantity"])
+
+    def test_browse_by_roast_or_brew_lists_only_the_matching(self):  # F-15; catalogue browse_catalog, contract § browse_catalog
+        r = Rig(self, (200, reply("browse_catalog", 0.8, roast="light")), (200, reply("browse_catalog", 0.8, brew="filter")),
+                (200, reply("browse_catalog", 0.8, roast="medium", brew="filter")))
+        # the walk's W-1: "do you have a light roast?" lists the light roasts, each a button
+        res = r.typed("มีแบบคั่วอ่อนไม๊", "t1")
+        self.assertEqual(res["outcome"], "matched")
+        self.assertEqual(res["bot"][0]["text"].split("\n")[0], "ตัวคั่วอ่อนมี 3 ตัวค่ะ")
+        self.assertEqual(res["bot"][0]["text"].count("📍"), 3)
+        self.assertEqual([b["params"] for b in res["bot"][0]["buttons"]], [{"product": "DH-001"}, {"product": "DH-003"}, {"product": "MM-001"}])
+        self.assertEqual(r.state().options_shown, ["DH-001", "DH-003", "MM-001"])
+        self.assertEqual(res["log_entry"]["applied"], [{"set": "recommend.roast", "to": "light"}])
+        self.assertEqual(r.state().order["recommend"], {"brew": None, "roast": "light"})
+        # a brew alone lists what suits it
+        res = r.typed("มีตัวไหนเหมาะดริปบ้าง", "t2")
+        self.assertTrue(res["bot"][0]["text"].startswith("ตัวที่เหมาะกับดริปมี 3 ตัวค่ะ\n📍 เกอิชา: "))
+        # a roast and a brew: the products fitting both (four — the most that become buttons)
+        res = r.typed("คั่วกลางไว้ดริปมีไหม", "t3")
+        self.assertEqual(len(res["bot"][0]["buttons"]), 4)
+        self.assertEqual(r.state().options_shown, ["DH-002", "KBN-001", "KBN-003", "MM-002"])
+        self.assertEqual(r.state().order["recommend"], {"brew": "filter", "roast": "medium"})
+        # the matcher: roast by the note's first part, decaf by keyword, both → roast alone when nothing fits both
+        self.assertEqual(order.matching(FLOW.products, "dark", None), ["KBN-002", "MM-004"])
+        self.assertEqual(order.matching(FLOW.products, "decaf", "cold_brew"), ["KBN-003"])
+        self.assertEqual(order.matching(FLOW.products, "dark", "espresso_milk"), ["KBN-002"])
+        self.assertEqual(order.matching(FLOW.products, None, None), [])
 
     def test_f4_first_miss_after_a_faq_offers_the_help_buttons(self):  # Findings F-4, fixed here
         r = Rig(self, (200, reply("faq.shipping_fee", 0.97)), (200, reply("none", 0.93)))

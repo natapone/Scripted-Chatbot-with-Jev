@@ -254,6 +254,8 @@ ORDER_INTENTS = ("order_product", "inform", "change_order", "view_order", "affir
 SLOTS = ("quantity", "brew", "roast", "payment")
 ROASTERS = {"ดอยหอม": "DH", "คั่วบ้านนา": "KBN", "เมล็ดเมือง": "MM"}
 PAYMENT_WORDS = {"cod": "เก็บเงินปลายทาง", "transfer": "โอนเงิน"}
+ROAST_WORDS = {"light": "คั่วอ่อน", "medium": "คั่วกลาง", "dark": "คั่วเข้ม", "decaf": "ไม่มีคาเฟอีน"}
+BREW_WORDS = {"espresso_milk": "เอสเปรสโซ่และเมนูนม", "filter": "ดริป", "cold_brew": "โคลด์บรูว์"}
 
 # the prototype's texts, as walked and approved (prototypes/assets/shared.js § act, § leadNext)
 ASK_QUANTITY = "รับกี่ถุงดีคะ? สั่งครบ 5 ถุงส่งฟรีน้า"
@@ -298,7 +300,12 @@ def ask(s: Session, flow: Flow, text: str, buttons: list[dict], *, slot: str, co
 
 
 def option_buttons(flow: Flow, slot: str) -> list[dict]:
-    return [button(label, "inform", {slot: key}) for key, label in flow.entities[slot]["options"].items()]
+    """One button per short label (the entity's `labels`: label → option key) — one option each, and
+    two labels may fill the same key. Jev never sees `labels`; it reads the long `options`. An entity
+    without `labels` falls back to its option texts."""
+    e = flow.entities[slot]
+    labels = e.get("labels") or {text: key for key, text in e["options"].items()}
+    return [button(label, "inform", {slot: key}) for label, key in labels.items()]
 
 
 def recommend_step(s: Session, flow: Flow, turn_no_after: int) -> None:
@@ -679,6 +686,20 @@ def act(s: Session, flow: Flow, intent: str, entities: dict, *, sku: str | None,
                 [button(p["spoken_name"], "select_option", {"product": p["sku"]}) for p in listed], response_id=intent)
             s.options_shown = [p["sku"] for p in listed]
             set_context(s, flow, "options_shown", {"skus": s.options_shown}, turn_no_after)
+        elif skus := rules.matching(flow.products, given(entities, "roast"), given(entities, "brew")):
+            # "{if a roast or brew was given: only the matching products, as a list}"
+            roast, brew = given(entities, "roast"), given(entities, "brew")
+            write_recommend(s, entities, applied)
+            what = "ตัว" + (ROAST_WORDS.get(roast, "") if roast else "") + (f"ที่เหมาะกับ{BREW_WORDS[brew]}" if brew in BREW_WORDS else "")
+            lines = [f"📍 {flow.products[k]['spoken_name']}: {flow.products[k]['note']} — {flow.products[k]['price']} บาท" for k in skus]
+            if len(skus) <= 4:          # sets: options_shown when four or fewer products are listed
+                say(s, f"{what}มี {len(skus)} ตัวค่ะ\n" + "\n".join(lines) + "\nสนใจตัวไหนคะ?",
+                    [button(flow.products[k]["spoken_name"], "select_option", {"product": k}) for k in skus], response_id=intent)
+                s.options_shown = list(skus)
+                set_context(s, flow, "options_shown", {"skus": s.options_shown}, turn_no_after)
+            else:
+                say(s, f"{what}มี {len(skus)} ตัวค่ะ\n" + "\n".join(lines) + "\nพิมพ์ชื่อตัวที่สนใจมาได้เลยน้า",
+                    buttons, response_id=intent)
         else:
             say(s, plain, buttons, response_id=intent)
 

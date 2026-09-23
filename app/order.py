@@ -243,3 +243,38 @@ def recommend(brew: str | None, roast: str | None) -> list[str]:
         return list(DECAF)
     by_roast = RECOMMEND.get(brew or "any", RECOMMEND["any"])
     return list(by_roast.get(roast or "any", by_roast["any"]))
+
+
+# --- browsing by roast or brew (the catalogue's browse_catalog: "only the matching products")
+
+ROAST_PREFIX = {"light": "คั่วอ่อน", "medium": "คั่วกลาง", "dark": "คั่วเข้ม"}   # the note's first part
+BREW_WORDS = {"espresso_milk": ("เอสเปรสโซ่", "ลาเต้", "นม"),
+              "filter": ("pour-over", "ฟิลเตอร์", "โมก้าพ็อต"),
+              "cold_brew": ("โคลด์บรูว์", "กาแฟเย็น")}
+
+
+def _keywords(p: dict) -> list[str]:
+    return [k.strip() for k in p.get("keywords", "").split(",")]
+
+
+def matches_roast(p: dict, roast: str) -> bool:
+    if roast == "decaf":
+        return "ดีแคฟ" in _keywords(p)
+    prefix = ROAST_PREFIX.get(roast)
+    return bool(prefix) and p["note"].split(" · ")[0] == prefix
+
+
+def matches_brew(p: dict, brew: str) -> bool:
+    return any(w in _keywords(p) for w in BREW_WORDS.get(brew, ()))
+
+
+def matching(products: dict, roast: str | None, brew: str | None) -> list[str]:
+    """The SKUs that fit the roast and the brew given, in table order. Both given and nothing fits
+    both → the roast alone decides (the customer said it plainly; the brew is a hint)."""
+    by_roast = [k for k, p in products.items() if roast and matches_roast(p, roast)]
+    by_brew = [k for k, p in products.items() if brew and matches_brew(p, brew)]
+    if roast and brew:
+        both = [k for k in by_roast if k in by_brew]
+        return both or by_roast
+    return by_roast or by_brew
+

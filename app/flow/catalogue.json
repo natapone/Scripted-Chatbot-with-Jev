@@ -103,15 +103,27 @@
         "filter": "ดริป pour-over เฟรนช์เพรส โมก้าพอต หรือกาแฟดำแบบ filter",
         "cold_brew": "โคลด์บรูว์ หรือกาแฟสกัดเย็น"
       },
+      "labels": {
+        "เอสเปรสโซ่": "espresso_milk",
+        "เมนูนม": "espresso_milk",
+        "ดริป": "filter",
+        "โคลด์บรูว์": "cold_brew"
+      },
       "not_mentioned": "ลูกค้าไม่ได้พูดถึงวิธีชง"
     },
     "roast": {
-      "instructions": "Which roast level, or decaf, does the customer ask for in `customer_said`? Choose not_mentioned if they mention none.",
+      "instructions": "Which roast level, or decaf, does the customer ask for in `customer_said` — by name, or by the taste they describe (sour or fruity is light, bitter or chocolatey is dark)? Choose not_mentioned if they mention none.",
       "options": {
-        "light": "คั่วอ่อน",
-        "medium": "คั่วกลาง",
-        "dark": "คั่วเข้ม",
+        "light": "คั่วอ่อน รสเปรี้ยว สดใส กลิ่นผลไม้ ดอกไม้",
+        "medium": "คั่วกลาง รสกลมกล่อม หวาน นุ่ม",
+        "dark": "คั่วเข้ม รสขม เข้มข้น ช็อกโกแลต บอดี้หนัก",
         "decaf": "ไม่มีคาเฟอีน ดีแคฟ"
+      },
+      "labels": {
+        "คั่วอ่อน": "light",
+        "คั่วกลาง": "medium",
+        "คั่วเข้ม": "dark",
+        "ไม่มีคาเฟอีน": "decaf"
       },
       "not_mentioned": "ลูกค้าไม่ได้พูดถึงระดับการคั่ว"
     },
@@ -240,7 +252,7 @@
       "id": "browse_catalog",
       "group": "shopping",
       "scope": "global",
-      "description": "อยากรู้ว่าร้านมีเมล็ดกาแฟอะไรขายบ้าง ขอดูรายการสินค้าทั้งหมด หรือดูของโรงคั่วใดโรงคั่วหนึ่ง",
+      "description": "อยากรู้ว่าร้านมีเมล็ดกาแฟอะไรขายบ้าง ขอดูรายการสินค้าทั้งหมด ดูของโรงคั่วใดโรงคั่วหนึ่ง หรือถามว่ามีเมล็ดแบบไหนบ้าง เช่น มีคั่วอ่อนไหม มีแบบเปรี้ยวๆ หรือขมๆ ไหม มีตัวไหนไว้ดริป โดยยังไม่ได้ระบุชื่อสินค้า",
       "examples": [
         {
           "text": "มีกาแฟอะไรบ้างคะ"
@@ -313,7 +325,7 @@
       "id": "product_info",
       "group": "shopping",
       "scope": "global",
-      "description": "ถามรายละเอียดของเมล็ดกาแฟตัวใดตัวหนึ่ง เช่น รสชาติ กลิ่น เหมาะกับอะไร หรือยังมีของไหม โดยไม่ได้ถามราคา",
+      "description": "ถามรายละเอียดของเมล็ดกาแฟตัวใดตัวหนึ่งที่ระบุชื่อหรือที่ร้านเพิ่งพูดถึง เช่น รสชาติ กลิ่น เหมาะกับอะไร หรือยังมีของไหม โดยไม่ได้ถามราคา",
       "examples": [
         {
           "text": "เกอิชารสชาติเป็นยังไงคะ",
@@ -1256,7 +1268,51 @@
         "deny",
         "browse_catalog"
       ]
+    },
+    {
+      "text": "มีแบบคั่วอ่อนไม๊",
+      "intent": "browse_catalog",
+      "entities": {
+        "roast": "light"
+      },
+      "accept_intents": [
+        "browse_catalog",
+        "ask_recommendation"
+      ]
+    },
+    {
+      "text": "มีแบบเปรี้ยวๆไม๊",
+      "intent": "browse_catalog",
+      "entities": {
+        "roast": "light"
+      },
+      "accept_intents": [
+        "browse_catalog",
+        "ask_recommendation"
+      ]
+    },
+    {
+      "text": "อยากได้แบบขมๆ เข้มๆ มีไหมคะ",
+      "intent": "browse_catalog",
+      "entities": {
+        "roast": "dark"
+      },
+      "accept_intents": [
+        "browse_catalog",
+        "ask_recommendation"
+      ]
+    },
+    {
+      "text": "มีตัวที่กลิ่นผลไม้ไหมครับ",
+      "intent": "browse_catalog",
+      "entities": {
+        "roast": "light"
+      },
+      "accept_intents": [
+        "browse_catalog",
+        "ask_recommendation"
+      ]
     }
   ],
-  "_revision": "Run 2 (2026-09-22): the `ordinal` entity removed; four select_option cases now expect the product Jev resolves from shop_said; four cases accept a value that the sentence does mention inside a question or that is resolved from shop_said. No intent description was reworded."
+  "_revision": "Run 2 (2026-09-22): the `ordinal` entity removed; four select_option cases now expect the product Jev resolves from shop_said; four cases accept a value that the sentence does mention inside a question or that is resolved from shop_said. No intent description was reworded. Story 1.7 (2026-09-23): `labels` on brew and roast (the buttons; Jev never sees them); browse_catalog and product_info descriptions sharpened; the roast question and options carry taste words; four browse-by-roast/taste cases appended at the end of the hard cases, so cases 1–125 keep their numbers."
 }
