@@ -19,6 +19,7 @@ from app.__main__ import main
 FAKE_KEY = "sk-or-v1-test-key-never-real"
 GOOD = {"OPENROUTER_API_KEY": FAKE_KEY, "THB_PER_USD": "34.9", "RATE_DATE": "2026-09-22"}
 NO_ENV_FILE = Path("/nonexistent/.env")
+PROTOTYPE_PAGE = Path(__file__).resolve().parent.parent / "prototypes" / "p-001-chat.html"
 
 
 def load(environ):
@@ -113,9 +114,19 @@ class ServerTests(unittest.TestCase):
                       "band-bottom"):
             self.assertIn(f'data-testid="{token}"', html, token)
         self.assertIn("jev-1.13", html)
+        js = self.get("/assets/shared.js")[2].decode("utf-8")
+        self.assertIn('fetch("/api/config"', js)           # boot() asks the server for the rate
+        for token in ("badge-clicked", "speed-test-open"):
+            self.assertIn(token, js + self.get("/assets/speed.js")[2].decode("utf-8"), token)
+        # the greeting comes from the server (tests/test_static.py), not a fixture file
+        self.assertEqual(self.get("/assets/fixtures.json")[0], 404)
+
+    @unittest.skipUnless(PROTOTYPE_PAGE.exists(), "prototypes/ is local-only, not in this clone")
+    def test_served_page_is_the_prototype(self):
+        html = self.get("/")[2].decode("utf-8")
         # Story 1.5 adds exactly its named hooks: data-status, rate-date, data-total-usd, the raw <details>
         applied = '<h4>What the bot did</h4><div id="viewer-applied" data-testid="viewer-applied"></div>\n'
-        self.assertEqual(html, (Path(__file__).parent.parent / "prototypes" / "p-001-chat.html")
+        self.assertEqual(html, PROTOTYPE_PAGE
                          .read_text(encoding="utf-8").replace("<b>jev-1.13</b>", '<b id="model-id">jev-1.13</b>')
                          .replace(" — prototype</title>", "</title>")
                          .replace('id="model-status">live</span> · <span id="rate" data-testid="rate"></span>',
@@ -125,12 +136,6 @@ class ServerTests(unittest.TestCase):
                          .replace(applied, applied
                                   + '        <details><summary>raw request</summary><pre id="viewer-raw-request" data-testid="viewer-raw-request"></pre></details>\n'
                                   + '        <details><summary>raw response</summary><pre id="viewer-raw-response" data-testid="viewer-raw-response"></pre></details>\n'))
-        js = self.get("/assets/shared.js")[2].decode("utf-8")
-        self.assertIn('fetch("/api/config"', js)           # boot() asks the server for the rate
-        for token in ("badge-clicked", "speed-test-open"):
-            self.assertIn(token, js + self.get("/assets/speed.js")[2].decode("utf-8"), token)
-        # the greeting comes from the server (tests/test_static.py), not a fixture file
-        self.assertEqual(self.get("/assets/fixtures.json")[0], 404)
 
     def test_api_config(self):
         status, ctype, body = self.get("/api/config")

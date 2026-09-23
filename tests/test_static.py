@@ -185,6 +185,7 @@ class StaticTests(unittest.TestCase):
         row = row.split("— *Delta")[0]                                # a note's words are not tokens
         return [t for t in re.findall(r"`([^`]+)`", row) if t not in ("jev", "focus_sku") and not t.startswith("context:")]
 
+    @unittest.skipUnless(DESIGN.exists(), "memory/ is local-only, not in this clone")
     def test_design_tokens_are_on_the_page(self):  # AC-6
         served = self.get("/")[1] + self.get("/assets/shared.js")[1]
         seen = []

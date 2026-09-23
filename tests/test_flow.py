@@ -32,6 +32,8 @@ def digest_from_index(source_name: str) -> str:
     raise AssertionError(f"no row for {source_name} in {SOURCE_INDEX}")
 
 
+@unittest.skipUnless(SPIKE_CATALOGUE.exists() and SOURCE_INDEX.exists(),
+                     "spikes/ and memory/ are local-only, not in this clone")
 class CopiesTests(unittest.TestCase):
     def test_copies_are_byte_identical(self):
         # the flow file is the spike's catalogue, byte for byte — "lifted, not rewritten"
