@@ -132,20 +132,35 @@ async function click(btn, opt) {
 
 /* ---------------- panel ---------------- */
 /* One row per answered message, from the server's log entry. `n` is the entry's place in the log
-   (1-based) — the row's token and what the viewer opens by. */
+   (1-based) — the row's token and what the viewer opens by. Four lines (05_components § TurnRow):
+   `#n · text` / intent + confidence (or FALLBACK / MODEL FAILED) / values with the provenance /
+   ms · ฿ · $ · open. A by-state turn names the intent the bot acted on and the slot it was awaiting;
+   Jev's own answer stays on `data-jev-intent` and in the viewer. */
+const PROV = (src) => src === "jev" ? "from Jev" : src === "focus_sku" ? "from focus" : src.startsWith("context:") ? `from context (${src.slice(8)})` : `from ${src.replace(/_/g, " ")}`;
+function intentLine(e) {
+  const j = e.jev || {};
+  if (e.outcome === "model_failed") return `MODEL FAILED · ${j.error || "no answer"}`;
+  if (e.outcome === "cap_reached") return "SPEND CAP REACHED · no call made";
+  if (e.outcome === "fallback") return `FALLBACK · ${j.intent ?? "—"}`;
+  if (j.by_state) return `${e.response_id || "inform"} · by state${j.awaiting ? ` (awaiting ${j.awaiting})` : ""}`;
+  return j.intent ?? "—";
+}
 function addTurnRow(e, n, animate = true) {
   const rows = $("#rows"); $("#rows .empty")?.remove(); const j = e.jev;
   const row = el("div", { class: animate ? "turn arrived" : "turn", "data-testid": `turn-${n}`, "data-turn-id": e.turn_id || "", "data-outcome": e.outcome, "data-at": e.at || "" });
   row.append(el("div", { class: "t1" }, el("span", { class: "n", text: `#${n}` }), document.createTextNode(e.input.text)));
   const kv = (k, v, c, cls = "") => el("div", { class: `kv ${cls}` }, el("span", { class: "k", text: k }), el("span", { class: "v", text: v }), el("span", { class: "c", text: c || "" }));
-  if (e.outcome === "model_failed") row.append(kv("intent", `MODEL FAILED · ${j?.error || "no answer"}`, "", "intent"));
-  else if (e.outcome === "cap_reached") row.append(kv("intent", "SPEND CAP REACHED · no call made", "", "intent"));
-  else { const iv = kv(e.outcome === "fallback" ? "fallback" : "intent", (j?.intent ?? "—") + (j?.by_state ? "  · by state" : ""), fmt.conf(j?.confidence), "intent"); iv.querySelector(".v").setAttribute("data-testid", `turn-${n}-intent`); iv.querySelector(".c").setAttribute("data-testid", `turn-${n}-confidence`); iv.querySelector(".c").setAttribute("data-value", j?.confidence ?? ""); row.append(iv); }
-  const vals = j && Object.entries(j.entities || {}).map(([k, v]) => `${k} ${v}`).join(" · ");
+  const failed = e.outcome === "model_failed" || e.outcome === "cap_reached";
+  const iv = kv(e.outcome === "fallback" ? "fallback" : "intent", intentLine(e), failed ? "—" : fmt.conf(j?.confidence), "intent");
+  iv.querySelector(".v").setAttribute("data-testid", `turn-${n}-intent`); iv.querySelector(".v").setAttribute("data-jev-intent", j?.intent ?? "");
+  iv.querySelector(".c").setAttribute("data-testid", `turn-${n}-confidence`); iv.querySelector(".c").setAttribute("data-value", failed ? "" : (j?.confidence ?? ""));
+  row.append(iv);
+  const vals = j && Object.entries(j.entities || {}).filter(([, v]) => v !== "not_mentioned").map(([k, v]) => `${k} ${v}`).join(" · ");
   row.append(kv("values", vals || "—", ""));
-  for (const a of e.applied || []) if (a.product_from && a.product_from !== "jev") row.append(el("div", { class: "prov", "data-testid": `turn-${n}-prov-product`, "data-source": a.product_from, text: `product ${a.set.match(/\[(.+?)\]/)?.[1] || a.to || ""}  ← from ${a.product_from}` }));
+  const a = (e.applied || []).find((x) => x.product_from);          // Provenance: where the product came from
+  if (a) row.append(el("div", { class: "prov", "data-testid": `turn-${n}-prov-product`, "data-source": a.product_from, text: `product ${a.set.match(/\[(.+?)\]/)?.[1] || a.to || ""}  ← ${PROV(a.product_from)}` }));
   const t4 = el("div", { class: "t4" });
-  t4.append(el("span", { "data-testid": `turn-${n}-ms`, "data-value": j?.ms ?? 0, text: j ? fmt.ms(j.ms || 0) : "—" }), el("span", { "data-testid": `turn-${n}-baht`, "data-value": j?.cost_usd ?? 0, text: j && j.cost_usd ? fmt.baht(j.cost_usd) : "฿0" }), el("span", { "data-testid": `turn-${n}-usd`, text: j && j.cost_usd ? fmt.usd(j.cost_usd) : "—" }));
+  t4.append(el("span", { "data-testid": `turn-${n}-ms`, "data-value": j?.ms ?? 0, text: j ? fmt.ms(j.ms || 0) : "—" }), el("span", { "data-testid": `turn-${n}-baht`, "data-value": j?.cost_usd ?? 0, text: j && j.cost_usd ? fmt.baht(j.cost_usd) : "฿0" }), el("span", { "data-testid": `turn-${n}-usd`, "data-value": j?.cost_usd ?? 0, text: j && j.cost_usd ? fmt.usd(j.cost_usd) : "—" }));
   t4.append(el("button", { class: "open", "data-testid": `turn-${n}-open`, text: "open", onclick: () => openViewer(n) }));
   row.append(t4); rows.prepend(row);
 }
@@ -216,8 +231,9 @@ async function loadConfig() {
 async function boot(opts = {}) {
   const cfg = await loadConfig();
   if (cfg) { CFG.rate = cfg.rate; CFG.model = cfg.model; const m = $("#model-id"); if (m && cfg.model) m.textContent = cfg.model.split("/").pop(); }
-  $("#rate").textContent = cfg ? `฿${CFG.rate.thb_per_usd}/$ (${CFG.rate.date.slice(5)})` : "rate —";
-  $("#rate").setAttribute("data-source", CFG.rate.source || "none");
+  $("#rate").textContent = cfg ? `฿${CFG.rate.thb_per_usd}/$` : "rate —";
+  $("#rate").setAttribute("data-source", CFG.rate.source || "none"); $("#rate").setAttribute("data-value", cfg ? CFG.rate.thb_per_usd : "");
+  $("#rate-date").textContent = cfg ? CFG.rate.date : "—"; $("#rate-date").setAttribute("data-value", cfg ? CFG.rate.date : "");
   $("#composer input")?.addEventListener("keydown", (ev) => { if (ev.key === "Enter" && !ev.shiftKey) { ev.preventDefault(); const i = ev.target; const t = i.value; i.value = ""; send(t); } });
   $("#send")?.addEventListener("click", () => { const i = $("#composer input"); const t = i.value; i.value = ""; send(t); });
   $("#start-over").addEventListener("click", startOver);

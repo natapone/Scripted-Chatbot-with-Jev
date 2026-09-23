@@ -84,9 +84,10 @@ class StaticTests(unittest.TestCase):
     TOKENS = {
         "index.html": ("chat", "messages", "composer", "send", "start-over", "panel", "key-info", "avg-ms",
                        "total-baht", "total-turns", "viewer", "viewer-close", "viewer-sent", "viewer-back",
-                       "viewer-applied", "rate", "model-status", "band-top", "band-bottom"),
+                       "viewer-applied", "rate", "rate-date", "model-status", "band-top", "band-bottom"),
         "shared.js": ("bot-${id}", "you-${youCount}", "opt-${i + 1}", "badge-clicked", "turn-${n}", "turn-${n}-intent",
                       "turn-${n}-confidence", "turn-${n}-ms", "turn-${n}-baht", "turn-${n}-usd", "turn-${n}-open",
+                      "turn-${n}-prov-product",                              # Story 1.5: F-1, now named by the design
                       "viewer-raw-request", "viewer-raw-response",
                       "readback", "readback-total"),                       # Story 1.4: the ReadBack component, from server data
         "speed.js": ("speed-test-open", "speed-pop", "speed-chooser", "speed-target-100", "speed-target-1000",
@@ -170,6 +171,66 @@ class StaticTests(unittest.TestCase):
         self.assertEqual((rb["variant"], rb["readback"]["total"], rb["readback"]["rows"][-1]), ("read-back", 1270, ["รวม", "1,270 บาท"]))
         self.assertEqual([b["label"] for b in v["live_buttons"]], ["ยืนยัน", "ขอแก้ไข"])
         self.assertNotIn(FAKE_KEY, json.dumps(v))
+
+    # Story 1.5 — the design diff as a test: every token 05_components names for the panel's
+    # components is emitted by the served page (AC-6; F-1)
+    DESIGN = Path(__file__).resolve().parent.parent / "memory" / "product" / "design" / "05_components.md"
+
+    def design_tokens(self, component):
+        import re
+        d = self.DESIGN.read_text(encoding="utf-8")
+        i = d.index(f"### `{component}`")
+        section = d[i:d.index("\n### ", i + 4)]
+        row = next(line for line in section.splitlines() if line.startswith("| **Tokens**"))
+        row = row.split("— *Delta")[0]                                # a note's words are not tokens
+        return [t for t in re.findall(r"`([^`]+)`", row) if t not in ("jev", "focus_sku") and not t.startswith("context:")]
+
+    def test_design_tokens_are_on_the_page(self):  # AC-6
+        served = self.get("/")[1] + self.get("/assets/shared.js")[1]
+        seen = []
+        for component in ("KeyInfo", "TurnRow", "PanelColumn", "TurnViewer"):
+            for token in self.design_tokens(component):
+                token = token.replace('data-testid="', "").rstrip('"')
+                if token.startswith("data-"):                            # an attribute the page sets
+                    needle = f'"{token}"' if f'"{token}"' in served else f"{token}="
+                elif "{n}" in token:                                     # a template: the literal the page builds
+                    needle = "`" + token.replace("{n}", "${n}") + "`"
+                elif token == "total-usd":                               # a hidden attribute, not a testid
+                    needle = 'data-total-usd='
+                else:
+                    needle = f'data-testid="{token}"' if f'data-testid="{token}"' in served else f'"data-testid": "{token}"'
+                self.assertIn(needle, served, f"{component}: {token}")
+                seen.append(token)
+        for token in ("turn-{n}-prov-product", "rate-date", "viewer-raw-request", "viewer-raw-response", "total-usd", "data-at"):
+            self.assertIn(token, seen)                                   # the design names them; the loop checked them
+        self.assertEqual(self.DESIGN.read_text(encoding="utf-8").count("turn-{n}-prov-product"), 1)
+
+    def node(self, script):
+        if not shutil.which("node"):
+            self.skipTest("no node")
+        src = str(server.STATIC / "assets" / "shared.js")
+        prog = ("const vm=require('vm');const fs=require('fs');const c={console};vm.createContext(c);"
+                f"vm.runInContext(fs.readFileSync({json.dumps(src)},'utf8')+';'+{json.dumps(script)},c);")
+        r = subprocess.run(["node", "-e", prog], capture_output=True, text=True, timeout=10)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        return json.loads(r.stdout)
+
+    def test_turn_row_reads_the_server_forms(self):  # AC-2; walk 3.3, 4.1, the hazard
+        e = lambda outcome, rid="inform", **jev: {"outcome": outcome, "response_id": rid, "jev": jev}
+        cases = [e("matched", intent="none", by_state=True, awaiting="quantity"),
+                 e("matched", "give_delivery_details", intent="none", by_state=True, awaiting="delivery"),
+                 e("matched", "affirm", intent="affirm"),
+                 e("fallback", "fallback.1", intent="none"),
+                 e("model_failed", "system.unreachable", error="ConnectionRefusedError"),
+                 e("cap_reached", "system.cap", error="cap")]
+        out = self.node("console.log(JSON.stringify({lines: " + json.dumps(cases) + ".map(intentLine),"
+                        " prov: ['jev', 'context:ask_quantity', 'focus_sku', 'context:offer_product', 'options_shown'].map(PROV)}))")
+        self.assertEqual(out["lines"], ["inform · by state (awaiting quantity)",
+                                        "give_delivery_details · by state (awaiting delivery)",
+                                        "affirm", "FALLBACK · none", "MODEL FAILED · ConnectionRefusedError",
+                                        "SPEND CAP REACHED · no call made"])
+        self.assertEqual(out["prov"], ["from Jev", "from context (ask_quantity)", "from focus",
+                                       "from context (offer_product)", "from options shown"])
 
     def test_speed_test_mounted_but_not_wired(self):
         status, js = self.get("/assets/speed.js")
