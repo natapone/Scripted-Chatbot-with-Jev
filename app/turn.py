@@ -298,7 +298,12 @@ def ask(s: Session, flow: Flow, text: str, buttons: list[dict], *, slot: str, co
 
 
 def option_buttons(flow: Flow, slot: str) -> list[dict]:
-    return [button(label, "inform", {slot: key}) for key, label in flow.entities[slot]["options"].items()]
+    """One button per short label (the entity's `labels`: label → option key) — one option each, and
+    two labels may fill the same key. Jev never sees `labels`; it reads the long `options`. An entity
+    without `labels` falls back to its option texts."""
+    e = flow.entities[slot]
+    labels = e.get("labels") or {text: key for key, text in e["options"].items()}
+    return [button(label, "inform", {slot: key}) for label, key in labels.items()]
 
 
 def recommend_step(s: Session, flow: Flow, turn_no_after: int) -> None:

@@ -36,9 +36,13 @@ def digest_from_index(source_name: str) -> str:
                      "spikes/ and memory/ are local-only, not in this clone")
 class CopiesTests(unittest.TestCase):
     def test_copies_are_byte_identical(self):
-        # the flow file is the spike's catalogue, byte for byte — "lifted, not rewritten"
-        self.assertEqual(sha256(flow.CATALOGUE), sha256(SPIKE_CATALOGUE))
-        self.assertEqual(flow.CATALOGUE.read_bytes(), SPIKE_CATALOGUE.read_bytes())
+        # the flow file was lifted from the spike's catalogue and has since been edited (button
+        # labels, sharper descriptions): what still holds is the same intents and the same option keys
+        app_cat = json.loads(flow.CATALOGUE.read_text(encoding="utf-8"))
+        spike = json.loads(SPIKE_CATALOGUE.read_text(encoding="utf-8"))
+        self.assertEqual([i["id"] for i in app_cat["intents"]], [i["id"] for i in spike["intents"]])
+        for name, e in spike["entities"].items():
+            self.assertEqual(list(app_cat["entities"][name].get("options", {})), list(e.get("options", {})), name)
         # the three tables are the owner's files: equal to the source bytes and to the index's digests
         for short, source_name in COPIES.items():
             copy = flow.DATA / f"{short}.csv"
