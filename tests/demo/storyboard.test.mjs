@@ -110,14 +110,14 @@ const RECAP = { calls: 100, concurrency: 32, elapsed_ms: 3221.4, calls_per_s: 31
 test("recapFigures shows every ruled figure from the recap, and refuses a missing one", () => {
   const f = Object.fromEntries(recapFigures(RECAP).map((x) => [x.key, x.value]));
   assert.equal(f.calls, "100"); assert.equal(f.time, "3.2 s"); assert.equal(f.rate, "31.0");
-  assert.equal(f.avg, "647 ms"); assert.equal(f.correct, "99.0 %");
-  assert.equal(f.total, "฿0.58  ($0.0175)"); assert.equal(f.per, "฿0.0058"); assert.equal(f.tokens, "4,167 + 586");
+  assert.equal(f.avg, "650 ms"); assert.equal(f.correct, "99.0 %");
+  assert.equal(f.total, "฿0.581 ($0.0175)"); assert.equal(f.per, "฿0.0058"); assert.equal(f.tokens, "4,167 + 586");
   assert.throws(() => recapFigures({ ...RECAP, avg_jev_ms: null }), /avg_jev_ms/);
 });
 
 test("measuredFor gives seconds, then baht, for as many slots as the subtitle has", () => {
   assert.deepEqual(measuredFor("in about {measured} seconds", RECAP), ["3.2"]);
-  assert.deepEqual(measuredFor("{measured} s, {measured} baht", RECAP), ["3.2", "0.58"]);
+  assert.deepEqual(measuredFor("{measured} s, {measured} baht", RECAP), ["3.2", "0.581"]);
 });
 
 test("mergeChapters offsets session 2 by session 1's duration and re-derives seconds", () => {

@@ -113,7 +113,9 @@ export function fillMeasured(text, values) {
   return text.replace(/\{measured\}/g, () => String(values[i++]));
 }
 
-/** The recap's figures as the card shows them — each read from the server's recap, none typed. */
+/** The recap's figures as the card shows them — each read from the server's recap, none typed.
+ *  The average and the total are rounded as the page's key-info block rounds them (to 10 ms; ฿ to
+ *  3 places), so the card and key-info never show two figures for one fact in the same frame. */
 export function recapFigures(r) {
   const need = ["calls", "elapsed_ms", "calls_per_s", "avg_jev_ms", "correct_share", "total_thb", "total_usd",
                 "cost_per_call_thb", "cost_per_call_usd"];
@@ -123,9 +125,9 @@ export function recapFigures(r) {
     { key: "calls", label: "calls", value: int(r.calls) },
     { key: "time", label: "total time", value: `${fix(r.elapsed_ms / 1000, 1)} s` },
     { key: "rate", label: "calls / s", value: fix(r.calls_per_s, 1) },
-    { key: "avg", label: "avg server time", value: `${int(r.avg_jev_ms)} ms` },
+    { key: "avg", label: "avg server time", value: `${int(Math.round(r.avg_jev_ms / 10) * 10)} ms` },
     { key: "correct", label: "correct", value: `${fix(r.correct_share * 100, 1)} %` },
-    { key: "total", label: "total cost", value: `฿${fix(r.total_thb, 2)}  ($${fix(r.total_usd, 4)})` },
+    { key: "total", label: "total cost", value: `฿${fix(r.total_thb, 3)} ($${fix(r.total_usd, 4)})` },
     { key: "per", label: "per call", value: `฿${fix(r.cost_per_call_thb, 4)}` },
   ];
   if (typeof r.avg_input_tokens === "number") {
@@ -138,7 +140,7 @@ export function recapFigures(r) {
 /** The {measured} values chapters 4 and 5 need, from the recap: [seconds] and [seconds, baht]. */
 export function measuredFor(chapterSubtitle, r) {
   const slots = (chapterSubtitle.match(/\{measured\}/g) || []).length;
-  const secs = fix(r.elapsed_ms / 1000, 1), baht = fix(r.total_thb, 2);
+  const secs = fix(r.elapsed_ms / 1000, 1), baht = fix(r.total_thb, 3);   // ฿ as key-info shows it
   return [secs, baht].slice(0, slots);
 }
 

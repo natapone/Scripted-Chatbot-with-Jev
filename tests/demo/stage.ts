@@ -20,6 +20,7 @@
  *   frames (F-20); the font floor is skipped there, the safe-area check still runs.
  * - `stage.legible()`: the full check on demand, at a dense frame the driver chooses, returning the
  *   measure so the ledger can quote it.
+ * - `callout(…, { holdMs })`: a longer hold than the reading-speed floor, for the storyboard's pace.
  */
 import { expect, type BrowserContext, type Locator, type Page } from '@playwright/test';
 import { execFileSync } from 'child_process';
@@ -326,7 +327,7 @@ export async function openStage(page: Page, opts: StageOptions) {
      */
     async callout(anchor: string | Locator, text: string,
                   o: { spotlight?: boolean; side?: 'right' | 'left' | 'top' | 'bottom';
-                       poster?: boolean } = {}) {
+                       poster?: boolean; holdMs?: number } = {}) {
       const loc = typeof anchor === 'string' ? page.locator(anchor).first() : anchor;
       await loc.scrollIntoViewIfNeeded().catch(() => {});
       const box = await loc.boundingBox();
@@ -408,7 +409,8 @@ export async function openStage(page: Page, opts: StageOptions) {
            k: ui() })
         .catch(() => {});
 
-      await ms(Math.max(SIZE.calloutHoldMinMs, (text.length / SIZE.readCharsPerSec) * 1000));
+      await ms(Math.max(SIZE.calloutHoldMinMs, o.holdMs ?? 0,   // [local] holdMs
+                        (text.length / SIZE.readCharsPerSec) * 1000));
       // The still is taken WITH the callout up: a poster in the deck without the thing that
       // explains it is a screenshot of a screen the reader has never seen.
       if (o.poster) await stage.poster();

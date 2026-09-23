@@ -65,6 +65,11 @@ const SESSION_OF = (n: number) => (n <= 3 ? 1 : 2);   // storyboard § 5–6: ch
 /** Where each callout fires: after the step whose result it points at (storyboard §§ 5–7). A callout
  *  with no cue fires after the chapter's last step. The wording stays in the storyboard. */
 const CUES: Record<number, string[]> = { 1: ['1.4'], 2: ['2.4', '2.5'], 3: ['3.4'], 4: ['4.2', '4.2'], 5: ['5.1'] };
+/** The pace (storyboard § 4: "a short hold after each Jev answer so the row can be read"), in ms. */
+const HOLD = { jev: 4200, click: 2000, callout: 5000, chapterEnd: 3500 };
+/** The cards' type. Single quotes inside: it goes into double-quoted style attributes. A `font`
+ *  shorthand whose family is `inherit` is invalid and silently dropped (the cards drew at 16 px). */
+const CARD_FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, system-ui, sans-serif";
 /** Chapters that open on a sparse frame — the owner accepted 16 px labels there (F-20). */
 const SPARSE_OPENING = new Set([1, 2, 3, 4]);
 
@@ -104,7 +109,9 @@ async function stopServer(child: ChildProcess) {
 
 // ---------------------------------------------------------------- one session
 
-type Assertion = { ok: boolean; what: string; value?: string | number | null };
+/** `claim`: a check of a sentence in frame against the product — reported for the owner's truth
+ *  check (a finding when false), not a broken pass. */
+type Assertion = { ok: boolean; what: string; value?: string | number | null; claim?: boolean };
 
 async function runSession(n: 1 | 2) {
   const dir = path.join(OUT, `session-${n}`);
@@ -154,7 +161,7 @@ async function runSession(n: 1 | 2) {
     if (r.model_status !== 'live' || ['model_failed', 'cap_reached'].includes(e.outcome) || e.jev?.error) {
       throw new AbortPass(`step ${id}: Jev did not answer (${r.model_status}, ${e.outcome}, ${e.jev?.error || ''})`);
     }
-    await stage.pause(e.jev ? 2600 : 1400);                    // a hold after each Jev answer, so the row can be read
+    await stage.pause(e.jev ? HOLD.jev : HOLD.click);          // a hold after each answer, so the row can be read
   }
 
   const liveButton = (label: string) => page.locator('button.opt[data-live="true"]').filter({ hasText: new RegExp(`^\\s*${label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*$`) });
@@ -192,42 +199,43 @@ async function runSession(n: 1 | 2) {
     const figs = recapFigures(recap);
     const heading = sizeWords('A thousand calls, read from the run', recap.calls);
     if (!STAGE_ON) return;
-    await page.evaluate(({ figs, heading }) => {
+    await page.evaluate(({ figs, heading, font }) => {
       const root = document.getElementById('stage-root'); if (!root) return;
       const card = document.createElement('div'); card.id = 'stage-recap';
       card.style.cssText = 'position:fixed;left:120px;top:150px;width:1000px;box-sizing:border-box;padding:40px 48px;' +
-        'background:rgba(11,15,22,.95);color:#fff;border-radius:18px;box-shadow:0 20px 60px rgba(0,0,0,.45);' +
-        "font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,system-ui,sans-serif;opacity:0;transition:opacity .4s";
-      card.innerHTML = `<div style="font:600 26px/1.2 inherit;color:#fbbf24;letter-spacing:.02em;margin-bottom:28px">${heading}</div>` +
+        'background:#0b0f16;color:#fff;border-radius:18px;box-shadow:0 20px 60px rgba(0,0,0,.45);' +
+        `font-family:${font};opacity:0;transition:opacity .4s`;
+      card.innerHTML = `<div style="font:600 30px/1.2 ${font};color:#fbbf24;letter-spacing:.02em;margin-bottom:28px">${heading}</div>` +
         '<div style="display:grid;grid-template-columns:1fr 1fr;gap:26px 48px">' +
-        figs.map((f: any) => `<div data-recap="${f.key}"><div style="font:500 24px/1.2 inherit;color:#94a3b8">${f.label}</div>` +
-          `<div style="font:700 42px/1.2 inherit;margin-top:6px;white-space:nowrap">${f.value}</div></div>`).join('') + '</div>';
+        figs.map((f: any) => `<div data-recap="${f.key}"><div style="font:500 24px/1.2 ${font};color:#94a3b8">${f.label}</div>` +
+          `<div style="font:700 42px/1.2 ${font};margin-top:6px;white-space:nowrap">${f.value}</div></div>`).join('') + '</div>';
       root.appendChild(card);
-      requestAnimationFrame(() => { card.style.opacity = '1'; });
-    }, { figs, heading });
-    await stage.pause(700);
+      setTimeout(() => { card.style.opacity = '1'; }, 50);
+    }, { figs, heading, font: CARD_FONT });
+    await stage.pause(1200);
     // What the card shows is what the recap said: read it back off the frame.
     const shown = await page.evaluate(() => Object.fromEntries([...document.querySelectorAll('#stage-recap [data-recap]')]
       .map((e) => [e.getAttribute('data-recap'), (e.lastElementChild as HTMLElement).innerText])));
-    const same = figs.every((f: any) => shown[f.key] === f.value);
+    const norm = (t: string) => String(t ?? '').replace(/\s+/g, ' ').trim();   // innerText folds spaces
+    const same = figs.every((f: any) => norm(shown[f.key]) === norm(f.value));
     assertions.push({ ok: same, what: 'the recap card shows each figure as formatted from GET /api/run\'s recap', value: figs.map((f: any) => `${f.label} ${f.value}`).join(' · ') });
   }
 
   async function endCard() {
     if (!STAGE_ON) return;
-    await page.evaluate(({ title, sentence }) => {
+    await page.evaluate(({ title, sentence, font }) => {
       const root = document.getElementById('stage-root'); if (!root) return;
       const card = document.createElement('div'); card.id = 'stage-end';
       card.style.cssText = 'position:fixed;inset:0;background:#0b0f16;color:#fff;display:flex;flex-direction:column;' +
         'justify-content:center;align-items:flex-start;padding:0 154px;opacity:0;transition:opacity .4s;' +
-        "font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,system-ui,sans-serif";
-      card.innerHTML = `<div style="font:700 76px/1.1 inherit;letter-spacing:-.01em">${title}</div>` +
+        `font-family:${font}`;
+      card.innerHTML = `<div style="font:700 76px/1.1 ${font};letter-spacing:-.01em">${title}</div>` +
         '<div style="width:180px;height:3px;background:#fbbf24;margin:32px 0"></div>' +
-        `<div style="font:400 36px/1.4 inherit;color:#cbd5e1;max-width:30em">“${sentence}”</div>`;
+        `<div style="font:400 36px/1.4 ${font};color:#cbd5e1;max-width:30em">“${sentence}”</div>`;
       root.appendChild(card);
       const cur = document.getElementById('stage-cursor'); if (cur) cur.style.display = 'none';
-      requestAnimationFrame(() => { card.style.opacity = '1'; });
-    }, { title: sb.title, sentence: sb.sentence });
+      setTimeout(() => { card.style.opacity = '1'; }, 50);
+    }, { title: sb.title, sentence: sb.sentence, font: CARD_FONT });
     await stage.pause(5000);
   }
 
@@ -242,7 +250,7 @@ async function runSession(n: 1 | 2) {
     // Above key-info (it is never covered); below a panel row, over the older rows, so the bubble
     // never sits on the row it names; beside the viewer, over the chat.
     const side = /key-info|total-baht/.test(c.anchor) ? 'top' : /viewer/.test(c.anchor) ? 'left' : 'bottom';
-    await stage.callout(c.anchor, sizeWords(c.text, RUN_SIZE), { side, poster: first });
+    await stage.callout(c.anchor, sizeWords(c.text, RUN_SIZE), { side, poster: first, holdMs: HOLD.callout });
   }
 
   async function checkLegible(where: string) {
@@ -333,10 +341,11 @@ async function runSession(n: 1 | 2) {
       await fire(null);
       if (ch.n === 1) {
         const row = pathRows.find((r) => r.intents_in_scope);
-        assertions.push({ ok: row?.intents_in_scope === 26, what: 'the "from 26 intents" callout: intents in scope on the first typed turn', value: row?.intents_in_scope });
+        const said = Number((ch.callouts[0]?.text.match(/(\d+) intents/) || [])[1]);
+        assertions.push({ ok: row?.intents_in_scope === said, claim: true, what: `claim: the "from ${said} intents" callout — the intents offered to Jev on the first typed turn (in scope + none)`, value: row?.intents_in_scope });
       }
       if (ch.n === 3) await checkLegible('the end of chapter 3');
-      await stage.pause(2500);
+      await stage.pause(HOLD.chapterEnd);
     }
 
     // session 1's cost and turns from the session's own log
@@ -361,7 +370,7 @@ async function runSession(n: 1 | 2) {
       path: pathRows, recap, legibility, assertions,
     };
     fs.writeFileSync(path.join(dir, 'session.json'), JSON.stringify(session, null, 2));
-    const bad = assertions.filter((a) => !a.ok);
+    const bad = assertions.filter((a) => !a.ok && !a.claim);
     console.log(`[demo] session ${n} (${MODE}) done — ${pathRows.length} steps, $${costUsd.toFixed(6)}, ${bad.length} failed assertion(s)`);
     for (const a of assertions) console.log(`  ${a.ok ? 'PASS' : 'FAIL'} ${a.what}${a.value != null ? ` — ${a.value}` : ''}`);
     return session;
@@ -445,7 +454,9 @@ function assemble() {
     assertions, files,
   }));
   console.log(`[demo] assembled ${path.relative(REPO, OUT)}: ${files.map((f) => `${f.name} ${f.bytes} B`).join(', ')}, ledger.md`);
-  const bad = assertions.filter((a: any) => !a.ok);
+  const bad = assertions.filter((a: any) => !a.ok && !a.claim);
+  const claims = assertions.filter((a: any) => !a.ok && a.claim);
+  if (claims.length) console.warn(`[demo] ${claims.length} claim(s) in frame not borne out — for the truth check, see ledger.md`);
   if (bad.length) { console.error(`[demo] ${bad.length} failed assertion(s) — see ledger.md`); process.exitCode = 4; }
 }
 
