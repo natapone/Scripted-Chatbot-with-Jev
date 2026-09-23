@@ -116,19 +116,22 @@ class ServerTests(unittest.TestCase):
         self.assertIn("jev-1.13", html)
         js = self.get("/assets/shared.js")[2].decode("utf-8")
         self.assertIn('fetch("/api/config"', js)           # boot() asks the server for the rate
-        for token in ("badge-clicked", "speed-test-open"):
-            self.assertIn(token, js + self.get("/assets/speed.js")[2].decode("utf-8"), token)
+        self.assertIn("badge-clicked", js)
+        # Story 2.2 (DR-010): the speed test adds nothing to the page — its control is gone
+        self.assertNotIn("speed-test-open", html + js + self.get("/assets/speed.js")[2].decode("utf-8"))
         # the greeting comes from the server (tests/test_static.py), not a fixture file
         self.assertEqual(self.get("/assets/fixtures.json")[0], 404)
 
     @unittest.skipUnless(PROTOTYPE_PAGE.exists(), "prototypes/ is local-only, not in this clone")
     def test_served_page_is_the_prototype(self):
         html = self.get("/")[2].decode("utf-8")
-        # Story 1.5 adds exactly its named hooks: data-status, rate-date, data-total-usd, the raw <details>
+        # Story 1.5 adds exactly its named hooks: data-status, rate-date, data-total-usd, the raw <details>;
+        # Story 2.2 boots the run from the address instead of mounting the speed-test control (DR-010)
         applied = '<h4>What the bot did</h4><div id="viewer-applied" data-testid="viewer-applied"></div>\n'
         self.assertEqual(html, PROTOTYPE_PAGE
                          .read_text(encoding="utf-8").replace("<b>jev-1.13</b>", '<b id="model-id">jev-1.13</b>')
                          .replace(" — prototype</title>", "</title>")
+                         .replace("boot({ after: () => speedMount() });", "boot({ after: () => speedFromAddress() });")
                          .replace('id="model-status">live</span> · <span id="rate" data-testid="rate"></span>',
                                   'id="model-status" data-status="live">live</span> · <span id="rate" data-testid="rate"></span>'
                                   ' · <span id="rate-date" data-testid="rate-date"></span>')

@@ -90,14 +90,10 @@ class StaticTests(unittest.TestCase):
                       "turn-${n}-confidence", "turn-${n}-ms", "turn-${n}-baht", "turn-${n}-usd", "turn-${n}-open",
                       "turn-${n}-prov-product",                              # Story 1.5: F-1, now named by the design
                       "readback", "readback-total"),                       # Story 1.4: the ReadBack component, from server data
-        "speed.js": ("speed-test-open", "speed-pop", "speed-chooser", "speed-target-100", "speed-target-1000",
-                     "speed-start", "speed-test", "speed-count", "speed-target", "speed-elapsed-ms", "speed-per-s",
-                     "speed-correct", "speed-errors", "speed-summary"),
-    }
+    }                                                                        # Story 2.2: speed.js's tokens are gone (DR-010)
 
     def test_page_carries_every_token(self):
-        served = {"index.html": self.get("/")[1], "shared.js": self.get("/assets/shared.js")[1],
-                  "speed.js": self.get("/assets/speed.js")[1]}
+        served = {"index.html": self.get("/")[1], "shared.js": self.get("/assets/shared.js")[1]}
         for name, tokens in self.TOKENS.items():
             for token in tokens:
                 if "$" in token:                                     # a template: the literal the page builds
@@ -315,17 +311,30 @@ var Node = N; var setTimeout = (f)=>f();
         self.assertEqual(out[5][:4], ["live", "badge live", "live", ""])             # start over / a fresh page
         self.assertIn(".badge.cap::before", self.get("/assets/design-system.css")[1])
 
-    def test_speed_test_mounted_but_not_wired(self):
-        status, js = self.get("/assets/speed.js")
-        self.assertEqual(status, 200)
-        self.assertNotIn("FX.", js)                                  # nothing to read at mount now
-        self.assertNotIn("fixtures.json", js)
-        self.assertIn("not wired until Epic 2", js)
-        self.assertIn("function speedMount(", js)
-        self.assertIn("function speedStart(", js)
-        self.assertIn("function speedReset(", js)                    # start-over still resets it
-        self.assertNotIn("setInterval", js)                          # no simulated run
-        self.assertNotIn("S.session", js)                            # and it writes nothing to the session
+    # Story 2.2 — DR-010: the speed test adds nothing to the page. The design's SpeedTest and
+    # SpeedTestButton sections are superseded, so their tokens are diffed in reverse: none is served.
+    GONE = ("speed-test-open", "speed-pop", "speed-chooser", "speed-target-100", "speed-target-1000", "speed-start",
+            "speed-test", "speed-count", "speed-target", "speed-elapsed-ms", "speed-per-s", "speed-correct",
+            "speed-errors", "speed-phase", "speed-ticker", "speed-summary", "speed-status")
+
+    def test_speed_test_control_is_off_the_page(self):  # AC-1
+        served = {name: self.get(path)[1] for name, path in (("index.html", "/"), ("shared.js", "/assets/shared.js"),
+                                                              ("speed.js", "/assets/speed.js"),
+                                                              ("design-system.css", "/assets/design-system.css"))}
+        for name, text in served.items():
+            self.assertFalse("speed-" in text, name)                # no testid, id or class of the control
+            for words in ("speed test ▾", "not wired", "1,000 demo", "100 rehearsal", '"Start"', "btn-start"):
+                self.assertFalse(words in text, f"{words} in {name}")
+        tokens = list(self.GONE)
+        if self.DESIGN.exists():                                    # the reverse diff reads the design's own list
+            tokens += [t.replace('data-testid="', "").rstrip('"') for c in ("SpeedTest", "SpeedTestButton")
+                       for t in self.design_tokens(c) if "speed-" in t]            # `data-value` is the chat's too
+        for token in tokens:
+            for name, text in served.items():
+                self.assertFalse(token in text, f"{token} in {name}")
+        self.assertIn("speedFromAddress()", served["index.html"])  # the only thing the page boots for it
+        self.assertNotIn("speedMount", served["index.html"] + served["speed.js"])
+        self.assertNotIn("setInterval", served["speed.js"])        # no simulated run
 
 
 if __name__ == "__main__":
