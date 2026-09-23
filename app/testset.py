@@ -5,15 +5,18 @@ rehearsal script score the same way; the code is moved, not rewritten.
 
 A case is one labelled message: its text, the intent it should get (`accept_intents` widens that for
 the hard cases), the contexts live when it is typed and the `shop_said` before it. `build_session` is
-the session the loop would hold when that case is typed. Nothing here calls Jev or writes to disk.
+the session the loop would hold when that case is typed — Story 2.6: with the order a shop would be
+holding at that point (`fill_order`), fictional, so the prepared reply is the one a real shop gives.
+None of it reaches the request to Jev. Nothing here calls Jev or writes to disk.
 """
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 
-from app import flow as flowmod, turn
+from app import flow as flowmod, order as rules, turn
 from app.flow import Flow
 from app.session import Session
 
@@ -53,9 +56,10 @@ def read_catalogue(path: Path = flowmod.CATALOGUE) -> dict:
         return json.load(f)
 
 
-def build_session(case: dict, flow: Flow) -> Session:
+def build_session(case: dict, flow: Flow, *, filled: bool = True) -> Session:
     """The session the loop would hold when this case is typed: the case's contexts live, its
-    `shop_said` the last (and only) bot bubble, the context's slot pending."""
+    `shop_said` the last (and only) bot bubble, the context's slot pending — and (Story 2.6, unless
+    `filled` is False) the order the shop holds at that step, from `fill_order`."""
     s = Session.new(session_id=f"replay-{case['n']}", flow_version="replay",
                     now=datetime(2026, 9, 23, tzinfo=timezone.utc))
     for ctx in case["contexts"]:
@@ -70,7 +74,101 @@ def build_session(case: dict, flow: Flow) -> Session:
         if ctx in SLOT_OF:
             s.pending_prompt = {"slot": SLOT_OF[ctx], "context": ctx, "params": {}, "message_id": msg_id}
             break
+    if filled:
+        fill_order(s, case, flow)
     return s
+
+
+# --- the order a case's session holds (Story 2.6, F-23)
+#
+# A case typed mid-order (a quantity, a promotion, the payment, the address, the read-back) or about
+# the order (change, cancel, view) is answered by `turn.act` from the session's order form. Without an
+# order the loop leads to the brew question; with the order the shop would hold at that step, the
+# reply is the next step — the read-back, the order code. Only the order form, `focus_sku`,
+# `promos_offered` and the live context's params are written: none of them is in the request to Jev
+# (`turn.build_request` reads `last_bot_message`, the pending slot, the transcript and the context
+# names). The order follows the case's `shop_said` where it names one (the read-back's lines, the
+# offered promotion, the offered product); otherwise it is the House Blend, two bags. Fictional.
+
+STAPLE = ("KBN-001", 2)                      # เฮาส์เบลนด์ × 2 — the shop's staple, as the read-back cases show it
+PROMO_LINE = {"PROMO-01": ("DH-002", 2), "PROMO-02": ("DH-001", 1),   # a first line `fit_promo` offers
+              "PROMO-03": ("KBN-001", 2), "PROMO-04": ("KBN-003", 1)}  # exactly this promotion for
+PAYMENT = "transfer"                         # the read-back cases' totals carry no COD fee
+ORDER_ABOUT = ("change_order", "cancel_order", "view_order")          # context-free, but about the order
+FILLED_CONTEXTS = ("ask_quantity", "offer_promo", "ask_payment", "ask_delivery", "confirm_order", "offer_product")
+
+
+def readback_lines(shop_said: str | None, flow: Flow) -> list[tuple[str, int]]:
+    """The lines a read-back names: `<spoken_name> × <n> ถุง`, in the table's order."""
+    out = []
+    for sku, p in flow.products.items():
+        m = re.search(re.escape(p["spoken_name"]) + r" × (\d+) ถุง", shop_said or "")
+        if m:
+            out.append((sku, int(m.group(1))))
+    return out
+
+
+def offered_product(shop_said: str | None, flow: Flow) -> str | None:
+    """The product a product card offers: its text opens with `<spoken_name> — `."""
+    return next((sku for sku, p in flow.products.items() if (shop_said or "").startswith(p["spoken_name"] + " — ")), None)
+
+
+def offered_promo(shop_said: str | None) -> str | None:
+    """The promotion an offer names: the offer's text before `สนใจไหมคะ` opens that promotion's detail."""
+    head = (shop_said or "").split(" สนใจไหมคะ")[0].strip()
+    return next((pid for pid, p in rules.promotions().items() if head and p["detail"].startswith(head)), None)
+
+
+def _line(s: Session, sku: str, qty: int | None) -> None:
+    rules.line_for(s.order, sku)["qty"] = qty
+    s.focus_sku = sku
+
+
+def _params(s: Session, ctx: str, params: dict) -> None:
+    s.contexts[ctx]["params"] = dict(params)
+    if (s.pending_prompt or {}).get("context") == ctx:
+        s.pending_prompt["params"] = dict(params)
+
+
+def _lines_then_promo_declined(s: Session, lines: list[tuple[str, int]]) -> None:
+    for sku, qty in lines:
+        _line(s, sku, qty)
+    offer = rules.fit_promo(s.order, [])
+    if offer is not None:                    # offered once already, and declined: the loop moves on
+        s.promos_offered.append(offer["promo_id"])
+
+
+def fill_order(s: Session, case: dict, flow: Flow) -> None:
+    """Write into `s` the fictional order the shop holds when this case is typed (see above)."""
+    ctx = set(case["contexts"])
+    said = case["shop_said"]
+    if "confirm_order" in ctx:               # the read-back: lines as read, payment and address given
+        _lines_then_promo_declined(s, readback_lines(said, flow) or [STAPLE])
+        s.order["payment"] = PAYMENT
+        s.order["delivery_text"] = rules.SAMPLE_DETAILS
+        _params(s, "confirm_order", {"order_hash": rules.order_hash(s.order)})
+    elif "ask_delivery" in ctx:              # asked for the address: lines and payment given
+        _lines_then_promo_declined(s, [STAPLE])
+        s.order["payment"] = PAYMENT
+    elif "ask_payment" in ctx:               # asked how to pay: the lines given, the promotion passed
+        _lines_then_promo_declined(s, [STAPLE])
+    elif "offer_promo" in ctx:               # a promotion offered for the line it fits
+        promo = offered_promo(said)
+        if promo in PROMO_LINE:
+            _line(s, *PROMO_LINE[promo])
+            offer = rules.fit_promo(s.order, [])
+            s.promos_offered.append(promo)
+            _params(s, "offer_promo", {"promo_id": offer["promo_id"], "effect": offer["effect"]})
+    elif "ask_quantity" in ctx:              # a product taken, its bags not yet said
+        _line(s, STAPLE[0], None)
+        _params(s, "ask_quantity", {"sku": STAPLE[0]})
+    elif "offer_product" in ctx:             # a product card shown: that product in focus, no line yet
+        sku = offered_product(said, flow)
+        if sku:
+            s.focus_sku = sku
+            _params(s, "offer_product", {"sku": sku})
+    elif not ctx and case["intent"] in ORDER_ABOUT:
+        _lines_then_promo_declined(s, [STAPLE])   # an order in progress, at the payment step
 
 
 # --- scoring (S-3's rules, lifted)
