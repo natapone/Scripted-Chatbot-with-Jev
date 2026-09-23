@@ -188,6 +188,12 @@ is redone — the recording is never patched.
 | AC-12 | Within the spend budget and the $1.00 cap | [ ] |
 | AC-13 | Every action through a real surface; exceptions recorded as findings | [ ] |
 
+**Signed by the owner, 2026-09-23, at the truth check of take 3** — *"this is good, video demo is
+done"*. Accepted as a whole; the rows above were not ruled one by one. Where the Epic ended
+differently from its criteria, by the owner's rulings of the day: take 3 was recorded without a
+rehearsal (AC-8); the spend cap was raised to $1.25 (AC-12); key-info shows THROUGHPUT, not
+average response; the deliverables kept are the MOV and `youtube.md` only (AC-9, AC-11).
+
 **Walked by**: ______  **Date**: ______  **Result**: ______
 
 Signed by the person who walked it, never by the agent that wrote it.
