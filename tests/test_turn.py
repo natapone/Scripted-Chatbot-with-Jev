@@ -604,12 +604,14 @@ class LeadTests(unittest.TestCase):
         turn.lead(s, FLOW, 6)
         self.assertTrue(s.transcript[-1]["text"].startswith("ค่าส่ง ฟรี ค่ะ"))
         s.order["lines"][0]["qty"] = 1
-        # payment set: the delivery question with the sample button
+        # payment set: the delivery question — what a customer sees, no button: the details are typed (F-30)
         s.order["payment"] = "cod"
         turn.lead(s, FLOW, 7)
         d = s.transcript[-1]
-        self.assertEqual(d["text"], "รบกวนขอชื่อ ที่อยู่ และเบอร์โทรสำหรับจัดส่งค่ะ — เดโมนี้ไม่ส่งของจริง ใช้ข้อมูลสมมติได้เลยน้า")
-        self.assertEqual(d["buttons"], [{"label": "ใช้ข้อมูลตัวอย่าง", "intent": "give_delivery_details", "params": {"sample": True}}])
+        self.assertEqual(d["text"], "รบกวนขอชื่อ ที่อยู่ และเบอร์โทรสำหรับจัดส่งค่ะ")
+        self.assertEqual(turn.ASK_DELIVERY, "รบกวนขอชื่อ ที่อยู่ และเบอร์โทรสำหรับจัดส่งค่ะ")
+        self.assertEqual(d["buttons"], [])
+        self.assertEqual(s.live_buttons, [])
         self.assertEqual((s.pending_prompt["slot"], list(s.contexts)[-1]), ("delivery", "ask_delivery"))
         # delivery set: the read-back as data, the hash in the context, the address masked for Jev
         s.order["delivery_text"] = ADDRESS
@@ -739,7 +741,7 @@ class OrderTests(unittest.TestCase):
         self.assertEqual(res["log_entry"]["applied"], [{"set": "payment", "to": "cod"}])
         self.assertEqual(list(s.contexts), ["ask_delivery"])
         self.assertEqual(s.contexts["ask_delivery"]["expires_after_turn"], 9)
-        self.assertEqual(res["bot"][0]["buttons"][0]["label"], "ใช้ข้อมูลตัวอย่าง")
+        self.assertEqual((res["bot"][0]["response_id"], res["bot"][0]["buttons"]), ("ask_delivery", []))   # typed only (F-30)
         # 8: the address — kept exactly, logged as [delivery details], read back, masked for Jev
         res = r.typed(ADDRESS, "t8")
         s = r.state()
@@ -799,7 +801,7 @@ class OrderTests(unittest.TestCase):
 
     def test_one_sentence_fills_three_slots(self):  # AC-2: walk § 2
         r = Rig(self, (200, reply("order_product", 0.96, product="KBN-002", quantity="3", payment="cod")),
-                (200, reply("deny", 0.9)), (200, reply("affirm", 0.92)))
+                (200, reply("deny", 0.9)), (200, reply("give_delivery_details", 0.9)), (200, reply("affirm", 0.92)))
         res = r.typed("เอาเอสเปรสโซ่คั่วเข้ม 3 ถุง เก็บปลายทางนะครับ", "t1")
         s = r.state()
         self.assertEqual(s.order["lines"], [{"sku": "KBN-002", "qty": 3, "added_by": "customer"}])
@@ -815,27 +817,32 @@ class OrderTests(unittest.TestCase):
         self.assertEqual(res["bot"][0]["text"], "ได้เลยค่ะ เอาเท่าเดิมนะคะ")
         s = r.state()
         self.assertEqual((s.order["promo_applied"], s.promos_offered, list(s.contexts)), (None, ["PROMO-01"], ["ask_delivery"]))
-        # the sample button fills delivery with the fictional constant; the read-back totals 1,270
-        res = r.click({"label": "ใช้ข้อมูลตัวอย่าง", "intent": "give_delivery_details", "params": {"sample": True}, "message_id": res["bot"][1]["id"]}, "c1")
+        # no sample button any more (F-30): a forged click of the old one is stale, ignored, writes nothing
+        self.assertEqual(res["bot"][1]["buttons"], [])
+        forged = r.click({"label": "ใช้ข้อมูลตัวอย่าง", "intent": "give_delivery_details", "params": {"sample": True}, "message_id": res["bot"][1]["id"]}, "c1")
+        self.assertEqual((forged["outcome"], r.state().order["delivery_text"]), ("ignored", None))
+        # the details are typed: kept exactly, logged as [delivery details], read back; the read-back totals 1,270
+        res = r.typed(ADDRESS, "t3")
         s = r.state()
-        self.assertEqual((res["outcome"], res["you"]["kind"], res["you"]["masked"]), ("matched", "clicked", False))
-        self.assertEqual(s.order["delivery_text"], order.SAMPLE_DETAILS)
-        self.assertEqual(res["log_entry"]["applied"], [{"set": "delivery_text", "to": "[sample]"}])
+        self.assertEqual((res["outcome"], res["you"]["kind"], res["you"]["masked"]), ("matched", "typed", True))
+        self.assertEqual(s.order["delivery_text"], ADDRESS)
+        self.assertEqual(res["log_entry"]["input"]["text"], "[delivery details]")
+        self.assertEqual(res["log_entry"]["applied"], [{"set": "delivery_text", "to": "[kept as typed]"}])
         rb = res["bot"][0]
-        self.assertEqual((rb["variant"], rb["readback"]["total"]), ("read-back", 1270))
+        self.assertEqual((rb["variant"], rb["readback"]["total"], rb["readback"]["delivery_text"]), ("read-back", 1270, ADDRESS))
         self.assertEqual(rb["readback"]["rows"], [["เอสเปรสโซ่คั่วเข้ม × 3 ถุง", "1,140 บาท"], ["ค่าส่ง", "100 บาท"],
                                                    ["ค่าบริการเก็บเงินปลายทาง", "30 บาท"], ["รวม", "1,270 บาท"]])
-        self.assertIn(order.SAMPLE_DETAILS, rb["text"])
-        res = r.typed("โอเคครับ เอาตามนี้เลย", "t3")
+        self.assertIn(ADDRESS, rb["text"])
+        res = r.typed("โอเคครับ เอาตามนี้เลย", "t4")
         self.assertEqual(r.state().order["order_code"], "BEAN-2609-0004")
         self.assertIn("เตรียมชำระ 1,270 บาทตอนรับของน้า", res["bot"][0]["text"])
-        self.assertEqual(r.client.calls, 3)
+        self.assertEqual(r.client.calls, 4)
 
     def test_a_question_mid_order_and_a_change_at_the_end(self):  # AC-3, AC-4: walk § 3.0–3.6
         r = Rig(self, (200, reply("ask_recommendation", 0.95)), (200, reply("inform", 0.9, brew="filter")),
                 (200, reply("inform", 0.9, roast="light")), (200, reply("select_option", 0.8, product="DH-001")),
                 (200, reply("affirm", 0.9)), (200, reply("faq.shipping_fee", 0.97)),
-                (200, reply("inform", 0.85, quantity="1")), (200, reply("view_order", 0.9)),
+                (200, reply("inform", 0.85, quantity="1")), (200, reply("view_order", 0.9)), (200, reply("give_delivery_details", 0.9)),
                 (200, reply("change_order", 0.94, quantity="3")), (200, reply("deny", 0.9)), (200, reply("affirm", 0.97)))
         # 3.0: the lead in the SOP's order — brew, roast, then the pair
         r.typed("ช่วยแนะนำหน่อยค่ะ", "t1")
@@ -869,13 +876,15 @@ class OrderTests(unittest.TestCase):
         self.assertEqual((res["bot"][0]["variant"], res["bot"][0]["readback"]["delivery_text"], res["bot"][0]["readback"]["tail"]), ("read-back", None, ""))
         self.assertEqual(res["log_entry"]["applied"], [])
         promo_id = res["bot"][1]["id"]
-        # 3.4b: the promotion, cod, the sample details — by click
+        # 3.4b: the promotion and cod by click; the details typed (F-30: no sample button)
         res = r.click({"label": "เพิ่มเนเชอรัล แอนแอโรบิก", "intent": "affirm", "params": {}, "message_id": promo_id}, "c1")
         self.assertEqual(r.state().order["promo_applied"], "PROMO-02")
         res = r.click({"label": "เก็บเงินปลายทาง", "intent": "inform", "params": {"payment": "cod"}, "message_id": res["bot"][-1]["id"]}, "c2")
         self.assertEqual(res["log_entry"]["applied"], [{"set": "payment", "to": "cod"}])
-        res = r.click({"label": "ใช้ข้อมูลตัวอย่าง", "intent": "give_delivery_details", "params": {"sample": True}, "message_id": res["bot"][-1]["id"]}, "c3")
+        self.assertEqual(res["bot"][-1]["buttons"], [])
+        res = r.typed(ADDRESS, "t8b")
         rb = res["bot"][0]["readback"]
+        self.assertEqual(rb["delivery_text"], ADDRESS)
         self.assertEqual(len(rb["rows"]), 6)
         self.assertEqual(rb["rows"][2], ["ส่วนลด ชุดชิมคั่วอ่อน", "−80 บาท"])
         self.assertEqual(rb["total"], 980 + 520 - 80 + 100 + 30)
@@ -903,7 +912,7 @@ class OrderTests(unittest.TestCase):
         # 3.6: a typed ยืนยันค่ะ confirms the order that was read out — hash B
         res = r.typed("ยืนยันค่ะ", "t11")
         self.assertEqual(r.state().order["order_code"], "BEAN-2609-0014")
-        self.assertEqual(r.client.calls, 11)
+        self.assertEqual(r.client.calls, 12)
 
     def test_a_stale_hash_reads_back_again_and_the_promotion_is_rechecked(self):  # contract § confirm_order, § promo_applied
         r = Rig(self, (200, reply("affirm", 0.97)), (200, reply("change_order", 0.9, product="KBN-001")),
@@ -1119,6 +1128,17 @@ class DeliveryByStateTests(unittest.TestCase):
 
 say = turn.say
 
+
+class CustomerOnlyTests(unittest.TestCase):
+    """Story 2.7 (F-30): the chat's own lines are what a customer of the shop reads — no line talks
+    about the demo, and no reply offers made-up details to click."""
+    def test_no_line_speaks_about_the_demo(self):
+        lines = {k: v for k, v in vars(turn).items() if k.isupper() and isinstance(v, str)}
+        self.assertIn("ASK_DELIVERY", lines)
+        for name, text in lines.items():
+            for gone in ("เดโมนี้", "ใช้ข้อมูลสมมติ", "ใช้ข้อมูลตัวอย่าง"):
+                self.assertNotIn(gone, text, name)
+        self.assertEqual(turn.CONFIRMED_TRANSFER, "โอนแล้วรบกวน reply slip ด้วยน้า")
 
 if __name__ == "__main__":
     unittest.main()

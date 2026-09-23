@@ -74,8 +74,7 @@
   },
   "events": {
     "welcome": "The page opens, or the conversation starts over → the `greet` response and its buttons. No model call.",
-    "button_click": "A button fires its intent directly, with its values already known (the 2 ถุง button is `inform` with quantity 2). No model call. The click is echoed as the customer's own message.",
-    "use_sample_details": "The ใช้ข้อมูลตัวอย่าง button under `ask_delivery` → `give_delivery_details` with a fixed fictional name, address and phone."
+    "button_click": "A button fires its intent directly, with its values already known (the 2 ถุง button is `inform` with quantity 2). No model call. The click is echoed as the customer's own message."
   },
   "entities": {
     "product": {
@@ -1062,21 +1061,21 @@
           "contexts": [
             "ask_delivery"
           ],
-          "shop_said": "รบกวนขอชื่อ ที่อยู่ และเบอร์โทรสำหรับจัดส่งค่ะ — เดโมนี้ไม่ส่งของจริง ใช้ข้อมูลสมมติได้เลยน้า"
+          "shop_said": "รบกวนขอชื่อ ที่อยู่ และเบอร์โทรสำหรับจัดส่งค่ะ"
         },
         {
           "text": "ส่งที่ 99 หมู่ 1 ต.ช้างเผือก อ.เมือง เชียงใหม่ 50300 ค่ะ ชื่อมานี",
           "contexts": [
             "ask_delivery"
           ],
-          "shop_said": "รบกวนขอชื่อ ที่อยู่ และเบอร์โทรสำหรับจัดส่งค่ะ — เดโมนี้ไม่ส่งของจริง ใช้ข้อมูลสมมติได้เลยน้า"
+          "shop_said": "รบกวนขอชื่อ ที่อยู่ และเบอร์โทรสำหรับจัดส่งค่ะ"
         },
         {
           "text": "คุณปิติ 55 ถ.นิมมานเหมินท์ เชียงใหม่ 080-000-0000",
           "contexts": [
             "ask_delivery"
           ],
-          "shop_said": "รบกวนขอชื่อ ที่อยู่ และเบอร์โทรสำหรับจัดส่งค่ะ — เดโมนี้ไม่ส่งของจริง ใช้ข้อมูลสมมติได้เลยน้า"
+          "shop_said": "รบกวนขอชื่อ ที่อยู่ และเบอร์โทรสำหรับจัดส่งค่ะ"
         }
       ],
       "response": "(the details are stored exactly as typed, then the order is read back)",

@@ -58,11 +58,18 @@ class LoadTests(unittest.TestCase):
         self.assertEqual(len(f.intents), 26)
         self.assertEqual(len(f.contexts), 9)
         self.assertEqual(len(f.entities), 5)
-        self.assertEqual(len(f.events), 3)
+        self.assertEqual(len(f.events), 2)                      # Story 2.7: the sample-details event is gone
         self.assertEqual(len(f.products), 10)
         self.assertEqual(list(f.entities), ["product", "quantity", "brew", "roast", "payment"])
-        self.assertEqual(sorted(f.events), ["button_click", "use_sample_details", "welcome"])
+        self.assertEqual(sorted(f.events), ["button_click", "welcome"])
         self.assertIn("options_shown", f.contexts)
+        # F-30: the shop's delivery question, as Jev is told it was asked, is what the customer sees
+        from app import turn
+        examples = next(i for i in f.intents if i["id"] == "give_delivery_details")["examples"]
+        self.assertEqual([e["shop_said"] for e in examples], [turn.ASK_DELIVERY] * 3)
+        raw = flow.CATALOGUE.read_text(encoding="utf-8")
+        for gone in ("ใช้ข้อมูลตัวอย่าง", "เดโมนี้", "use_sample_details"):
+            self.assertNotIn(gone, raw)
         self.assertEqual(f.contexts["options_shown"]["brings_into_scope"], ["select_option"])
         self.assertEqual(f.fallback["id"], "none")
         self.assertTrue(f.fallback["description"])

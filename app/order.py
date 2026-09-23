@@ -21,7 +21,7 @@ COD_FEE = 30
 PROMO02_DISCOUNT = 80          # Geisha + Natural Anaerobic
 PROMO03_PER_BAG = 30           # House Blend at 6+
 
-# the sample delivery details — the prototype's constant; fictional, never a real person
+# a fictional delivery address — the test set's filled orders use it (app/testset.py); never a real person
 SAMPLE_DETAILS = "สมชาย ใจดี 123/4 ซอยสุขุมวิท 50 คลองเตย กรุงเทพ 10110 โทร 081-000-0000"
 
 PROMOS_LISTED = ("PROMO-01", "PROMO-02", "PROMO-03", "PROMO-04")     # PROMO-05 is not used

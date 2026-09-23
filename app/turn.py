@@ -219,7 +219,7 @@ def current_message_id(session: Session) -> str | None:
 
 
 def welcome(session: Session, flow: Flow) -> dict:
-    """`events.welcome`: the greet response and its buttons, no model call."""
+    """`events.welcome`: the greet response and its buttons, with no call to Jev."""
     greet = flow_intent(flow, "greet")
     return say(session, strip_text(greet["response"]), buttons_of(greet), response_id="greet")
 
@@ -260,7 +260,7 @@ BREW_WORDS = {"espresso_milk": "เอสเปรสโซ่และเมน
 # the prototype's texts, as walked and approved (prototypes/assets/shared.js § act, § leadNext)
 ASK_QUANTITY = "รับกี่ถุงดีคะ? สั่งครบ 5 ถุงส่งฟรีน้า"
 ASK_PAYMENT = "ค่าส่ง {fee} ค่ะ ชำระแบบไหนสะดวกคะ? โอนผ่านบัญชีธนาคาร หรือเก็บเงินปลายทาง (มีค่าบริการเพิ่ม 30 บาท)"
-ASK_DELIVERY = "รบกวนขอชื่อ ที่อยู่ และเบอร์โทรสำหรับจัดส่งค่ะ — เดโมนี้ไม่ส่งของจริง ใช้ข้อมูลสมมติได้เลยน้า"
+ASK_DELIVERY = "รบกวนขอชื่อ ที่อยู่ และเบอร์โทรสำหรับจัดส่งค่ะ"
 PROMO_TAKEN = "ได้เลยค่ะ ใส่ให้แล้วนะคะ"
 PROMO_DECLINED = "ได้เลยค่ะ เอาเท่าเดิมนะคะ"
 PROMO_DROPPED = "โปร {title} ไม่เข้าเงื่อนไขแล้ว แอดเอาออกให้นะคะ"
@@ -269,7 +269,7 @@ CHANGE_WHAT = "ได้เลยค่ะ อยากแก้ส่วนไ�
 CHANGED = "ได้เลยค่ะ แก้ให้แล้วนะคะ"
 NO_ORDER = "ตอนนี้ยังไม่มีรายการในออเดอร์ค่ะ"
 CONFIRMED = "ขอบคุณคุณพี่มากค่ะ ☕ รหัสออเดอร์ {code} {how}"
-CONFIRMED_TRANSFER = "โอนแล้วรบกวน reply slip ด้วยน้า — เดโมนี้ไม่มีบัญชีจริงค่ะ"
+CONFIRMED_TRANSFER = "โอนแล้วรบกวน reply slip ด้วยน้า"
 CONFIRMED_COD = "เตรียมชำระ {total} บาทตอนรับของน้า"
 ALREADY_CONFIRMED = "ออเดอร์นี้ยืนยันแล้วค่ะ รหัส {code} — อยากสั่งเพิ่ม กดเริ่มใหม่ได้เลยน้า"
 RECOMMEND_PAIR = "story bean ก่อนนะคะ — ตัวแรก {a_name}: {a_note} อีกตัว {b_name}: {b_note} สนใจตัวไหนคะ?"
@@ -369,7 +369,7 @@ def lead(s: Session, flow: Flow, turn_no_after: int, *, recommend: bool = True) 
             slot="payment", context="ask_payment", params=None, turn_no_after=turn_no_after, response_id="ask_payment")
         return
     if not o.get("delivery_text"):
-        ask(s, flow, ASK_DELIVERY, [button("ใช้ข้อมูลตัวอย่าง", "give_delivery_details", {"sample": True})],
+        ask(s, flow, ASK_DELIVERY, [],       # typed only: the customer writes their own details
             slot="delivery", context="ask_delivery", params=None, turn_no_after=turn_no_after, response_id="ask_delivery")
         return
     data = rules.readback_data(o, flow.products, ask=True)
@@ -616,10 +616,10 @@ def act(s: Session, flow: Flow, intent: str, entities: dict, *, sku: str | None,
             say(s, "ได้ค่ะ", help_buttons(flow), response_id=intent)
 
     elif intent == "give_delivery_details":
-        details = rules.SAMPLE_DETAILS if entities.get("sample") else (text or "").strip()
+        details = (text or "").strip()
         if details:
             o["delivery_text"] = details
-            applied.append({"set": "delivery_text", "to": "[kept as typed]" if not entities.get("sample") else "[sample]"})
+            applied.append({"set": "delivery_text", "to": "[kept as typed]"})
             drop_context(s, "ask_delivery")
             lead(s, flow, turn_no_after)
         else:
