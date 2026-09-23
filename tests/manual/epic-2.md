@@ -11,10 +11,13 @@ updated: 2026-09-23
 ## Read this first
 
 The walker is the **owner**, as the presenter. The walk has two halves: the **speed test** on the
-chat screen (§ 1), which this Epic builds, and the **three stops** of the demo video (§§ 2–4) —
-the audience and one sentence, the storyboard, the truth check — ending with the upload. Written
-before the build, from the flow PR-1 and the prototype walk records for it, whose control labels and
-landings were proven in a browser against the prototype.
+chat screen (§ 1), which this Epic builds, and **stop 3** of the demo video, the truth check (§ 4).
+Stops 1 and 2 — the audience and one sentence, the storyboard — were confirmed before the build and
+are recorded in §§ 2–3, not walked. The walk ends at the truth check: the video stays a local file
+the owner takes; publishing the code, and the README for people who clone it, belong to Epic 3.
+Written before the build, from the flow PR-1, the confirmed storyboard and the
+prototype walk records, whose control labels and landings were proven in a browser against the
+prototype.
 
 > **Every action goes through a real surface.** No direct API call, no database client, no seed
 > script. **If something cannot be done from a surface, that is a FINDING** — write it down and
@@ -34,10 +37,10 @@ signed customer chat. It is walked against the dry-walk record of Story 2.4 (loc
 any red row there is read out before step 1.1.
 
 > 📍 **Where you are now** — the walk is longer than one sitting, because the agent rehearses and
-> records between § 3 and § 4. Your steps, in order: **§ 1** the speed test at 100 (about ten
-> minutes) → **§ 2** confirm the audience → **§ 3** confirm the storyboard → *(the agent rehearses
-> and records — you are not needed)* → **§ 4** watch the cut, rule on each claim, upload. Each
-> section starts from the state its preconditions name, so a pause costs one section, not the walk.
+> records between § 1 and § 4. Your steps, in order: **§ 1** the speed test at 100 and the cap
+> refusal (about ten minutes) → *(the agent rehearses and records — you are not needed)* → **§ 4**
+> watch the WebM, rule on each claim, sign. Stops 1 and 2 are already done (§§ 2–3). Each section
+> starts from the state its preconditions name, so a pause costs one section, not the walk.
 
 The cold start is the project's, verbatim, on **port 8768**: on this machine 8765 and 8766 are held
 by other processes.
@@ -67,7 +70,6 @@ by other processes.
 | Hazard | What goes wrong |
 |---|---|
 | Every speed-test message is a paid call to Jev | **100 ≈ $0.016; 1,000 ≈ $0.163.** The walker only ever starts **100**. The 1,000 run happens once, in the agent's recording, and only with $0.17 of room left under the $1.00 cap |
-| The upload to YouTube and a push to GitHub are public | The owner's accounts and the owner's hands only (§ 4.6–4.7). The agent never pushes and never touches YouTube |
 | Jev's API can time out or return empty answers under load | In the speed test they are **counted as errors** on the status line, never retried silently; a handful is the designed behaviour, not a finding. A run with more than 1 % errors is a finding |
 | The recorded cut is only true for the build it recorded | Any change to `app/` after the recording means re-recording the whole pass; § 4's preconditions check it |
 
@@ -97,59 +99,47 @@ Notes: 1.5 is run right after 1.4, before 1.7 starts a new session file. The cor
 scored against the test set's labels; a handful short of 100 is the model's real accuracy on
 video, not a defect.
 
-## § 2 — Stop 1: the audience and the one sentence
+## §§ 2–3 — Stops 1 and 2: a record, not walked
 
-**Preconditions as data:** Epic 2's Stories are all Done and dry-walked; no storyboard for this
-video exists yet, or it exists with its audience block unconfirmed. The chat and the speed test are
-the only surfaces the video will show.
+Both confirmed by the owner on 2026-09-23, **before any of Epic 2 was built**:
 
-`Executed: [ ]  ·  Result: [ ]`
+* **Stop 1** — who watches, the five ideas, the one sentence, Thai chat with English overlay:
+  confirmed.
+* **Stop 2** — the storyboard, five chapters in two sessions (session 1 = chapters 1–3, the chat;
+  session 2 = chapters 4–5, the speed test at 1,000 and its recap card, then the end card):
+  confirmed, at `/Users/dong/src/gig_demo/Scripted-Chatbot-with-Jev/demos/developers-2026-09-23/storyboard.md`
+  (local only).
+* **`demo_lint`**: green on that storyboard.
 
-| Step | Action | Command / Where | Expected |
-|---|---|---|---|
-| 2.1 | 🤖 💬 The readiness table | the agent's reply | One row per chapter source: the customer chat — **built, real**; the speed test — **built, real**. No chapter is drawn from the prototype, so no DESIGN PREVIEW badge is needed |
-| 2.2 | 👤 💬 Read and rule: who watches, the three to five ideas, the one sentence they could repeat, the language | the agent's reply | **Confirm** or change, in your words. The audience is developers and AI builders; the chat is Thai and the overlay English. Nothing is drawn until this is confirmed |
+A change to the storyboard after this point is a return to stop 2, and everything after it is redone.
 
-## § 3 — Stop 2: the storyboard
-
-**Preconditions as data:** the audience block is confirmed and written at the head of the
-storyboard file; no recording of this storyboard exists.
-
-`Executed: [ ]  ·  Result: [ ]`
-
-| Step | Action | Command / Where | Expected |
-|---|---|---|---|
-| 3.1 | 🤖 💻 The frames drawn, and the lint | the agent's reply; `python3 /Users/dong/src/sales-hive/npc-plugin/plugins/npch/scripts/demo_lint.py /Users/dong/src/gig_demo/Scripted-Chatbot-with-Jev/demos/*/storyboard.md` | Every chapter drawn as a frame; the lint is green |
-| 3.2 | 👤 💬 Read the two sessions | the agent's reply | **Session 1**, a complete chat: a typed sentence at most stages, clicks at least twice. **Session 2**, the speed test at **1,000**, the status line and the key-info block in shot. The panel is in shot in both sessions. Each chapter: what is on screen, what is pointed at, the English subtitle, the idea it lands. The key-info block is in shot in every frame. **Confirm** or change — a change here costs nothing |
-| 3.3 | 👤 💬 Check every number a subtitle will say | the agent's reply | Each names where it was measured — on the built chat, not the spikes: latency as the loop measures it (about 500 ms at the median, not the 330–345 ms of the early spikes), throughput and correct share from the dry walk, cost from reported cost at the stated rate |
-
-**Between § 3 and § 4 — the agent's, not walked.** The rehearsal: overlays off, from a cold start,
+**Between § 1 and § 4 — the agent's, not walked.** The rehearsal: overlays off, from a cold start,
 every planned typed sentence checked for the exit the storyboard expects, the speed test at **100,
-never 1,000**; any product defect fixed, not worked around. **A planned sentence Jev misroutes comes back to you**: show it honestly, or choose another sentence — it is never hidden. Then **one continuous recording** — no
-resume, no splice — with the speed test at 1,000. The rehearsal is reported as rows with a verdict
+never 1,000**; any product defect fixed, not worked around. **A planned sentence Jev misroutes comes back to you**: show it honestly, or choose another sentence — it is never hidden. Then the recording at **1920×1080, 100 %, `devicePixelRatio` 1, no zoom** — each session one
+continuous pass, no resume, no splice — with the speed test at 1,000; chapter 5's recap figures read
+from the page, never typed. The MOV is made from the WebM with `ffmpeg`. The rehearsal is reported as rows with a verdict
 each before § 4 starts; a red row means no recording. If Jev becomes unreachable during the
 recording, the pass is abandoned and recorded again whole; if the spend cap is reached, recording
 stops and you are asked.
 
-## § 4 — Stop 3: the truth check, and the upload
+## § 4 — Stop 3: the truth check
 
-**Preconditions as data:** the video's folder holds the MP4, the WebM, `chapters.json`, the script,
-the deck and the ledger; the ledger names the provider (OpenRouter), the model
-(`typesafe/jev-1.13`), the rate with its source and date, and the pass's cost; the rehearsal report has no red
-row; no commit has touched `app/` since the recording started.
+**Preconditions as data:** the video's folder in `demos/` holds the WebM, the MOV made from it,
+`chapters.json`, the script, the deck and the ledger; the ledger names the provider (OpenRouter), the
+model (`typesafe/jev-1.13`), the rate with its source and date, the pass's cost, and chapter 5's
+recap figures as the driver read them; the rehearsal report has no red row; no commit has touched
+`app/` since the recording started.
 
 `Executed: [ ]  ·  Result: [ ]`
 
 | Step | Action | Command / Where | Expected |
 |---|---|---|---|
-| 4.1 | 🤖 💻 Measure: the deliverables exist | `ls -l /Users/dong/src/gig_demo/Scripted-Chatbot-with-Jev/demos/*/ && ffprobe -v error -show_entries stream=width,height -show_entries format=duration /Users/dong/src/gig_demo/Scripted-Chatbot-with-Jev/demos/*/*.webm` | Each file with a byte size; `width=1920`, `height=1080`, and a duration that matches `chapters.json`'s last chapter end |
-| 4.2 | 👤 🎬 Watch the whole MP4, start to finish | the video file | One continuous pass: session 1 then session 2, no jump. The key-info block is in shot throughout; no chapter card, callout or subtitle covers the chat or a figure |
+| 4.1 | 🤖 💻 Measure: the deliverables exist | `ls -l /Users/dong/src/gig_demo/Scripted-Chatbot-with-Jev/demos/developers-2026-09-23/ && ffprobe -v error -show_entries stream=width,height -show_entries format=duration /Users/dong/src/gig_demo/Scripted-Chatbot-with-Jev/demos/developers-2026-09-23/*.webm /Users/dong/src/gig_demo/Scripted-Chatbot-with-Jev/demos/developers-2026-09-23/*.mov` | Each file with a byte size; for both the WebM and the MOV `width=1920`, `height=1080`, and a duration that matches `chapters.json`'s last chapter end |
+| 4.2 | 👤 🎬 Watch the whole WebM, start to finish | the WebM | Session 1 (chapters 1–3) then session 2 (chapters 4–5), each one continuous pass, no jump; it ends on the recap card, then the end card. The key-info block is in shot throughout; no chapter card, callout or subtitle covers the chat or a figure |
 | 4.3 | 👤 🎬 For each chapter, answer *is this true today?* | the chapter list with its drive column, beside the video | Every claim **yes**, and every English subtitle says what the Thai screen says. A **no** becomes a re-worded subtitle, a label, or a cut chapter — and any change to the recording means re-recording the whole pass |
-| 4.4 | 👤 🎬 Check three things in frame | the video | The panel header's `jev-1.13` is legible; the speed test's summary figures match the ledger's; the rate and date on screen match the ledger's |
-| 4.5 | 🤖 💻 Measure: the spend, and the key in no log or recorded result | the ledger and the project's spend line, read out; then `cd /Users/dong/src/gig_demo/Scripted-Chatbot-with-Jev && python3 -c "import re,subprocess;k=re.search(r'OPENROUTER_API_KEY=(\S+)',open('.env').read()).group(1);print(subprocess.run(['grep','-rl','--exclude-dir=.git','--exclude=.env',k,'.'],capture_output=True,text=True).stdout or 'clean')"` | The pass's cost is in the ledger; the POC's total stays under $1.00; `clean` — now including `var/` and the video's folder |
-| 4.6 | 👤 💻 Measure: the repo's default branch holds the running chat and a README that says how to start it, and nothing it should not | `cd /Users/dong/src/gig_demo/Scripted-Chatbot-with-Jev && git fetch origin && git ls-tree -r --name-only origin/main \| grep -c '^app/' ; git ls-tree -r --name-only origin/main \| grep -cx 'README.md' ; git ls-tree -r --name-only origin/main \| grep -cE '\.(mp4\|webm\|png\|jpg)$\|deck\.html\|^(memory\|prototypes\|spikes\|var)/'` | Three numbers: above 0 · `1` · `0`. The README's start command matches § 0's. If the first is 0, the upload waits: the owner pushes first (the agent does not), or rules that the upload waits for Epic 3 |
-| 4.7 | 👤 🌐 Upload the MP4 to YouTube | the owner's YouTube account | The video is up; its description links the repo. The agent does not publish |
-| 4.8 | 🤖 💬 Record what was shown | the agent's reply | Who watched, what was shown, and — later — what viewers said, each with the `mm:ss` it refers to |
+| 4.4 | 👤 🎬 Check chapter 5's recap against the ledger | the recap card in the video; the ledger | Each figure — calls, total time, calls per second, average ms, share correct, total ฿ and $, cost per call — equals the ledger's, and agrees with the speed test's summary on screen behind it |
+| 4.5 | 👤 🎬 Check the frame | the video | The panel header's `jev-1.13` is legible; the rate and date on screen match the ledger's; **no zoom** — the page is at the same scale in every chapter, and the ledger records zoom 1.0 and `devicePixelRatio` 1 for each |
+| 4.6 | 🤖 💻 Measure: the spend, and the key in no log or recorded result | the ledger and the project's spend line, read out; then `cd /Users/dong/src/gig_demo/Scripted-Chatbot-with-Jev && python3 -c "import re,subprocess;k=re.search(r'OPENROUTER_API_KEY=(\S+)',open('.env').read()).group(1);print(subprocess.run(['grep','-rl','--exclude-dir=.git','--exclude=.env',k,'.'],capture_output=True,text=True).stdout or 'clean')"` | The pass's cost is in the ledger; the POC's total stays under $1.00; `clean` — now including `var/` and the video's folder |
 
 ## Findings
 
@@ -158,9 +148,8 @@ row; no commit has touched `app/` since the recording started.
 | | | | | |
 
 Severity: blocked the walk / wrong on screen / cosmetic. Every finding gets a destination before
-sign-off. A claim found false **after** the upload is the owner's to correct — the video taken
-down or its description corrected; the agent cannot touch YouTube. A blocking finding in § 1 may be fixed and § 1 re-walked from its preconditions. A finding
-at § 4 that changes the product or a claim goes back to § 3 (the storyboard) and everything after it
+sign-off. A blocking finding in § 1 may be fixed and § 1 re-walked from its preconditions. A finding
+at § 4 that changes the product or a claim goes back to stop 2 (the storyboard, §§ 2–3) and everything after it
 is redone — the recording is never patched.
 
 ## Sign-off
@@ -172,12 +161,12 @@ is redone — the recording is never patched.
 | AC-3 | The summary stands; start-over clears; the chat works after | [ ] |
 | AC-4 | A run that would cross the cap is refused before any call, with the room left | [ ] |
 | AC-5 | Delivery phrases masked; the key in no served or committed file | [ ] |
-| AC-6 | Stop 1 confirmed | [ ] |
-| AC-7 | Stop 2 confirmed; the lint green; every number measured on the built chat | [ ] |
+| AC-6 | Stop 1 confirmed | met 2026-09-23, before the build (§§ 2–3) |
+| AC-7 | Stop 2 confirmed; the lint green | met 2026-09-23, before the build (§§ 2–3) |
 | AC-8 | The rehearsal green before the recording | [ ] |
-| AC-9 | One continuous recording; the deliverables and the ledger exist | [ ] |
-| AC-10 | Every claim in frame true today | [ ] |
-| AC-11 | Uploaded by the owner, with the chat on the default branch | [ ] |
+| AC-9 | One continuous pass per session at 100 %, no zoom; the WebM, the MOV, `chapters.json` and the ledger exist | [ ] |
+| AC-10 | Every claim in frame true today; the recap's figures equal the ledger's; every `{measured}` number measured on the built chat | [ ] |
+| AC-11 | The WebM and the MOV stay in `demos/` for the owner to take; nothing uploaded or pushed | [ ] |
 | AC-12 | Within the spend budget and the $1.00 cap | [ ] |
 | AC-13 | Every action through a real surface; exceptions recorded as findings | [ ] |
 
