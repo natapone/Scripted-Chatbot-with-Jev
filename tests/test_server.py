@@ -116,7 +116,8 @@ class ServerTests(unittest.TestCase):
         self.assertIn("jev-1.13", html)
         js = self.get("/assets/shared.js")[2].decode("utf-8")
         self.assertIn('fetch("/api/config"', js)           # boot() asks the server for the rate
-        self.assertIn("badge-clicked", js)
+        self.assertNotIn("badge-clicked", js)               # Story 2.7: a click's echo carries no tag
+        self.assertNotIn("no model call", js)
         # Story 2.2 (DR-010): the speed test adds nothing to the page — its control is gone
         self.assertNotIn("speed-test-open", html + js + self.get("/assets/speed.js")[2].decode("utf-8"))
         # the greeting comes from the server (tests/test_static.py), not a fixture file
