@@ -1,51 +1,113 @@
 # Scripted-Chatbot-with-Jev
 
-A demo proof of concept: a scripted Thai sales chatbot whose conversation flow is traversed by
-**Jev**, a fast, cheap decision model on OpenRouter. The chatbot answers from a predefined set of
-replies; Jev's job at each node is to decide where the conversation goes next. The point of the
-demo is to show Jev's speed and cost in a real-looking sales conversation.
+A small demo of **Jev** (`typesafe/jev-1.13` on OpenRouter), a fast and cheap decision model.
 
-## Status
+- The demo is a Thai sales chatbot for a coffee shop, "Beanly".
+- Every reply is written in advance. Jev does not write text.
+- For each message the customer types, Jev chooses what it means (the intent) and picks out the
+  details (product, quantity, payment, and so on). The bot then gives the prepared reply.
+- A panel next to the chat shows every decision: the intent, the confidence, the time, and the cost.
 
-**POC — the chat is built: an intent-based bot, every typed sentence routed by Jev, with a panel showing each decision's time and cost.** Before it was built, spike S-1 checked how Jev behaves
-through the OpenRouter API on Thai sales messages: 42 of 42 test messages routed correctly, about
-345 ms per decision, about $0.00003 per decision. Those were clean, happy-path test messages, so
-read it as "worth building", not as a measure of real-world accuracy. Spike S-3 then put a
-whole predefined intent catalogue — about 24 intents, Dialogflow-style — into one question, with
-five entity questions in the same call: 121 of 125 Thai messages matched the right intent, every
-named value was found, at about 330 ms and $0.00016 a turn when the API was healthy. (It was not
-always: one run hit 57 empty responses in a row.) The spikes' records and the design documents are
-kept out of this repo; the conversation itself — every intent, entity, context and reply — is
-`app/flow/catalogue.json`.
+## Results
 
-## Running it
+Measured on 23 September 2026, from the recorded demo run.
 
-Python 3.11, standard library only — nothing to install.
+| | Result |
+|---|---|
+| Messages | 1,000 customer messages, 32 at the same time |
+| Total time | 23.7 seconds |
+| **Throughput** | **42.3 messages per second** (one answer every 24 ms) |
+| Correct | 99.2 % (992 of 1,000) |
+| Total cost | ฿5.807 ($0.1751) |
+| Cost per message | ฿0.0058 ($0.000175) |
+| Tokens per message | 4,168 input, 586 output |
+| One chat message alone | usually about 0.5 seconds |
+
+How it was measured:
+
+- The cost is the cost that OpenRouter reports for each call. Baht uses ฿33.17 per $1 (23 September 2026).
+- Only input tokens are charged ($0.042 per million). Output tokens are free.
+- Speed changes from day to day. Other runs of the same test took 26 to 35 seconds.
+
+## Runbook: run it on your computer
+
+You need:
+
+- Python 3.11. Nothing else to install.
+- Your own OpenRouter API key with a little credit (less than $1 is enough).
+
+Steps:
+
+1. Get the code.
+   ```
+   git clone https://github.com/natapone/Scripted-Chatbot-with-Jev.git
+   cd Scripted-Chatbot-with-Jev
+   ```
+2. Create your settings file.
+   ```
+   cp .env.example .env
+   ```
+3. Open `.env` and fill in three values:
+   - `OPENROUTER_API_KEY` — your OpenRouter key.
+   - `THB_PER_USD` — the exchange rate used to show baht, for example `33.17`.
+   - `RATE_DATE` — the date of that rate, for example `2026-09-23`.
+
+   `.env` stays on your computer. Git never commits it.
+4. Start the app.
+   ```
+   python3.11 -m app
+   ```
+   Wait for this line:
+   ```
+   ready · warm-up 200 · http://127.0.0.1:8765
+   ```
+5. Open http://127.0.0.1:8765 in your browser. You see Beanly's greeting and three buttons.
+6. Chat. Click a button or type in Thai, for example `ช่วยแนะนำหน่อยค่ะ`. After each typed
+   message, a new row appears in the panel on the right.
+7. See the speed test. Open http://127.0.0.1:8765/?run=100 . The same chat screen shows 100
+   customer messages answered very fast. The numbers at the bottom right count up.
+8. Stop the app with Ctrl-C.
+
+## What it costs you
+
+| | About |
+|---|---|
+| One typed message | ฿0.006 ($0.0002) |
+| One full order conversation | ฿0.04 |
+| `/?run=100` | $0.02 |
+| `/?run=1000` | $0.18 |
+
+Clicking a button is free: a click does not call the model. For safety, the app stops calling the
+model after $0.50 for each start (you can change this with `SPEND_CAP_USD` in `.env`).
+
+## If something goes wrong
+
+- **"refusing to start: OPENROUTER_API_KEY is missing"** or **"exchange rate is missing"** — check
+  the three values in `.env`.
+- **"cannot bind … Is another server on that port?"** — start on another port:
+  `PORT=8770 python3.11 -m app`, then open http://127.0.0.1:8770 .
+- **Rows say MODEL FAILED** — your key may be wrong or out of credit, or the network is down.
+  Buttons still work.
+
+## How it works
+
+- `app/flow/catalogue.json` holds the conversation: every intent, the details to pick out,
+  and the prepared replies. To change the bot, start with this file.
+- `app/jev.py` sends one request to Jev for each typed message and reads back its choices.
+- `app/turn.py` uses those choices and the conversation so far to pick the next prepared reply.
+
+## Tests
+
+No network and no key needed:
 
 ```
-cp .env.example .env        # then fill in the three names: your OpenRouter key, the THB/USD
-                            # rate and the date it was taken. .env is ignored by git.
-python3.11 -m app           # one warm-up call to Jev, then: ready · warm-up 200 · http://127.0.0.1:8765
+python3.11 -m unittest discover -s tests -t . -v
 ```
 
-Open `http://127.0.0.1:8765/`. The server binds to 127.0.0.1 only; the key stays in the server
-process and never reaches the browser. It refuses to start, with one plain line, when the key or
-the rate is missing. `PORT=8766 python3.11 -m app` starts a second, throwaway instance.
-`JEV_HOST=127.0.0.1:1 python3.11 -m app` rehearses "Jev unreachable" (`ready · warm-up 0 · …`) — for the agent's rehearsal only, never the owner's walk.
+For maintainers: `.env.example` also lists switches for testing only (`JEV_HOST`, `JEV_TIMEOUT`,
+`SESSION_TTL_S`, `VAR_DIR`). You do not need them to run the demo.
 
-Tests (no network, no Jev): `python3.11 -m unittest discover -s tests -t . -v`
-
-The conversation is reachable without the page: `GET /api/session?id=` starts or restores a session, `POST /api/turn` sends one typed or clicked message (the shapes are in `app/server.py`); snapshots live in `var/sessions/`, never committed.
-
-## Where things are
-
-- `app/` — the server (`server.py`), the turn loop (`turn.py`), the order form (`order.py`), the Jev
-  client (`jev.py`), the flow file (`flow/catalogue.json`) and the page (`static/`)
-- `tests/` — the suite (hermetic: no network, no Jev); `tests/manual/` — the walk runbooks a person
-  follows; `tests/rehearsal/` — the agent's measurement scripts against real Jev
-
-The example sales material (the Beanly SOP and the product, FAQ and promotion tables) is
-fictional demo data.
+The example shop, products and customer details are made up.
 
 ## Licence
 
