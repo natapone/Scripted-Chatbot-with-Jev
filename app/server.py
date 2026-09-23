@@ -9,6 +9,11 @@ Story 1.3 adds the conversation: `GET /api/session?id=` (create or restore), `PO
 (one typed or clicked message, JSON body of at most 64 KB) and `POST /api/session/end`. The flow,
 the store and the Jev client hang on the server object; the handler only routes. The key lives
 inside the client's headers and is in no response.
+
+Story 2.1 adds the speed test's engine (`app/speed.py`): `POST /api/run {session_id, target}` starts a
+run on that session — or refuses it before its first call with `model_status: "cap"` — and
+`GET /api/run?session_id=&since=` reports it: counts, the items from `since` on, and once it has ended
+the recap figures for the recording driver. Nothing on the page reads them yet (Story 2.2, DR-010).
 """
 from __future__ import annotations
 
@@ -74,6 +79,9 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json({"ok": True})
         if path == "/api/session":
             return self.get_session(parse_qs(url.query).get("id", [""])[0])
+        if path == "/api/run":
+            q = parse_qs(url.query)
+            return self.get_run(q.get("session_id", [""])[0], q.get("since", ["0"])[0])
         file = static_path(path)
         if file is None:
             return self.send_json({"error": "not found"}, HTTPStatus.NOT_FOUND)
@@ -88,14 +96,41 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = urlsplit(self.path).path
-        if path not in ("/api/turn", "/api/session/end"):
+        if path not in ("/api/turn", "/api/session/end", "/api/run"):
             return self.send_json({"error": "not found"}, HTTPStatus.NOT_FOUND)
         body = self.read_json()
         if body is None:
             return
         if path == "/api/turn":
             return self.post_turn(body)
+        if path == "/api/run":
+            return self.post_run(body)
         return self.post_end(body)
+
+    # --- the speed test
+
+    def post_run(self, body: dict):
+        from app import speed
+        session_id = body.get("session_id")
+        if not isinstance(session_id, str) or not session_id:
+            return self.send_json({"error": "session_id is missing"}, HTTPStatus.BAD_REQUEST)
+        try:
+            return self.send_json(self.server.runs.start(session_id, body.get("target")))  # type: ignore[attr-defined]
+        except speed.RunError as e:
+            return self.send_json({"error": e.message}, e.status)
+
+    def get_run(self, session_id: str, since: str):
+        from app import speed
+        if not session_id:
+            return self.send_json({"error": "session_id is missing"}, HTTPStatus.BAD_REQUEST)
+        try:
+            n = int(since or 0)
+        except ValueError:
+            return self.send_json({"error": "since must be a whole number"}, HTTPStatus.BAD_REQUEST)
+        try:
+            return self.send_json(self.server.runs.progress(session_id, n))  # type: ignore[attr-defined]
+        except speed.RunError as e:
+            return self.send_json({"error": e.message}, e.status)
 
     # --- the conversation
 
@@ -167,7 +202,7 @@ def make_server(cfg: Config, port: int | None = None, *, flow=None, store=None, 
     """Bind to 127.0.0.1 (never configurable) on cfg.port, or `port` (0 = ephemeral, for tests).
     The flow, the store and the client are built from the Config when not given — a test passes
     its own store (a temp dir) and client (a fake connection)."""
-    from app import flow as flow_module, jev, session
+    from app import flow as flow_module, jev, session, speed
     httpd = ThreadingHTTPServer((HOST, cfg.port if port is None else port), Handler)
     httpd.daemon_threads = True
     httpd.cfg = cfg  # type: ignore[attr-defined]
@@ -175,4 +210,6 @@ def make_server(cfg: Config, port: int | None = None, *, flow=None, store=None, 
     httpd.store = store if store is not None else session.Store(  # type: ignore[attr-defined]
         session.flow_version_of(flow_module.CATALOGUE), cfg.var_dir, ttl_s=cfg.session_ttl_s)
     httpd.client = client if client is not None else jev.Client(cfg.key, cfg.jev_host, cfg.jev_timeout)  # type: ignore[attr-defined]
+    httpd.runs = speed.Runs(httpd.store, httpd.flow, httpd.client, spend_cap_usd=cfg.spend_cap_usd,  # type: ignore[attr-defined]
+                            thb_per_usd=cfg.thb_per_usd, rate_date=cfg.rate_date)
     return httpd

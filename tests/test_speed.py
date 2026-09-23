@@ -258,5 +258,72 @@ class CapAndRecapTests(unittest.TestCase):
         self.assertEqual(speed.recap([], thb_per_usd=34.9, rate_date="d", target=0, concurrency=1, wall_ms=0, model="m")["calls"], 0)
 
 
+class RouteTests(unittest.TestCase):
+    """`POST /api/run` and `GET /api/run` over loopback; Jev is the labelled fake."""
+
+    def serve(self, conn, cap="0.50"):
+        from app import config, server
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        cfg = config.load(env_path=Path("/nonexistent/.env"),
+                          environ={"OPENROUTER_API_KEY": FAKE_KEY, "THB_PER_USD": "34.9", "RATE_DATE": "2026-09-22",
+                                   "VAR_DIR": tmp.name, "SPEND_CAP_USD": cap})
+        client = jev.Client(FAKE_KEY, timeout=10, connection=conn)
+        store = session.Store(session.flow_version_of(flow.CATALOGUE), cfg.var_dir)
+        httpd = server.make_server(cfg, port=0, flow=FLOW, store=store, client=client)
+        threading.Thread(target=httpd.serve_forever, daemon=True).start()
+        self.addCleanup(httpd.server_close)
+        self.addCleanup(httpd.shutdown)
+        port = httpd.server_address[1]
+        bodies = []
+
+        def call(method, path, body=None):
+            import http.client
+            c = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
+            c.request(method, path, body=json.dumps(body).encode() if body is not None else None,
+                      headers={"Content-Type": "application/json"} if body is not None else {})
+            r = c.getresponse()
+            text = r.read().decode("utf-8")
+            c.close()
+            bodies.append(text)
+            return r.status, json.loads(text)
+        return call, httpd, bodies
+
+    def test_start_poll_and_recap(self):  # AC-1, AC-5
+        call, httpd, bodies = self.serve(labelled())
+        _, sess = call("GET", "/api/session")
+        sid = sess["session_id"]
+        status, started = call("POST", "/api/run", {"session_id": sid, "target": 10})
+        self.assertEqual((status, started["refused"], started["target"], started["concurrency"], started["state"]),
+                         (200, False, 10, 10, "running"))
+        self.assertTrue(httpd.runs.get(sid).wait(10))
+        status, p = call("GET", f"/api/run?session_id={sid}&since=0")
+        self.assertEqual((status, p["state"], p["answered"], len(p["items"]), p["run_id"]), (200, "done", 10, 10, started["run_id"]))
+        self.assertEqual(p["recap"]["calls"], 10)
+        for key in ("elapsed_ms", "calls_per_s", "avg_ms", "correct", "correct_share", "errors", "total_usd",
+                    "total_thb", "cost_per_call_usd", "cost_per_call_thb"):
+            self.assertIn(key, p["recap"])
+        _, again = call("GET", f"/api/session?id={sid}")                # the log the page restores from
+        self.assertEqual(len([e for e in again["log"] if e.get("batch") == started["run_id"]]), 10)
+        self.assertEqual(call("GET", f"/api/run?session_id={sid}&since=10")[1]["items"], [])
+        for b in bodies:
+            self.assertNotIn(FAKE_KEY, b)
+
+    def test_refusal_and_bad_requests(self):  # AC-4
+        conn = labelled()
+        call, httpd, _ = self.serve(conn, cap="0.001")
+        sid = call("GET", "/api/session")[1]["session_id"]
+        status, r = call("POST", "/api/run", {"session_id": sid, "target": 100})
+        self.assertEqual((status, r["refused"], r["model_status"]), (200, True, "cap"))
+        self.assertEqual((len(conn.log["sent"]), httpd.client.calls), (0, 0))
+        self.assertEqual(call("GET", f"/api/run?session_id={sid}")[0], 404)
+        self.assertEqual(call("GET", f"/api/session?id={sid}")[1]["log"], [])
+        self.assertEqual(call("POST", "/api/run", {"session_id": sid, "target": "100"})[0], 400)
+        self.assertEqual(call("POST", "/api/run", {"target": 100})[0], 400)
+        self.assertEqual(call("POST", "/api/run", {"session_id": "nope", "target": 1})[0], 404)
+        self.assertEqual(call("GET", "/api/run")[0], 400)
+        self.assertEqual(call("GET", f"/api/run?session_id={sid}&since=x")[0], 400)
+
+
 if __name__ == "__main__":
     unittest.main()
