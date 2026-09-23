@@ -89,7 +89,8 @@ class StaticTests(unittest.TestCase):
         "shared.js": ("bot-${id}", "you-${youCount}", "opt-${i + 1}", "badge-clicked", "turn-${n}", "turn-${n}-intent",
                       "turn-${n}-confidence", "turn-${n}-ms", "turn-${n}-baht", "turn-${n}-usd", "turn-${n}-open",
                       "turn-${n}-prov-product",                              # Story 1.5: F-1, now named by the design
-                      "readback", "readback-total"),                       # Story 1.4: the ReadBack component, from server data
+                      "readback", "readback-total",                        # Story 1.4: the ReadBack component, from server data
+                      "turn-${n}-at"),                                     # Story 2.3: the row's receive time
     }                                                                        # Story 2.2: speed.js's tokens are gone (DR-010)
 
     def test_page_carries_every_token(self):
@@ -396,6 +397,16 @@ function screen(){ return { you: byId.messages.children.filter(n => n.cls().incl
         r = subprocess.run(["node", "-e", prog], capture_output=True, text=True, timeout=20)
         self.assertEqual(r.returncode, 0, r.stderr[-2000:])
         return json.loads(r.stdout)
+
+    def test_row_carries_its_receive_time_to_the_millisecond(self):  # Story 2.3 AC-2
+        out = self.page(
+            "freshPage(); const a = item(1, 'ค่าส่งเท่าไหร่คะ').entry; a.jev.t_received = '2026-09-23T10:00:00.807Z';"
+            "const cap = { turn_id: 'c', at: '2026-09-23T10:00:01.042Z', outcome: 'cap_reached', input: { text: 'x' }, jev: { status: 0, error: 'cap', ms: 0, cost_usd: 0 } };"
+            "S.session.log.push(a, cap); addTurnRow(a, 1); addTurnRow(cap, 2);"
+            "const at = (n) => byId.rows.all().find((k) => k.getAttribute('data-testid') === `turn-${n}-at`);"
+            "console.log(JSON.stringify([1, 2].map((n) => [at(n).textContent, at(n).getAttribute('data-value')])));")
+        self.assertEqual(out, [["10:00:00.807", "2026-09-23T10:00:00.807Z"],     # t_received, sliced as logged
+                               ["10:00:01.042", "2026-09-23T10:00:01.042Z"]])    # no stamps: the entry's `at`
 
     def test_run_starts_from_the_address_once(self):  # AC-2
         out = self.page(

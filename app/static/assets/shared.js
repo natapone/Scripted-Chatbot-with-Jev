@@ -170,6 +170,8 @@ function addTurnRow(e, n, animate = true) {
   const a = (e.applied || []).find((x) => x.product_from);          // Provenance: where the product came from
   if (a) row.append(el("div", { class: "prov", "data-testid": `turn-${n}-prov-product`, "data-source": a.product_from, text: `product ${a.set.match(/\[(.+?)\]/)?.[1] || a.to || ""}  ← ${PROV(a.product_from)}` }));
   const t4 = el("div", { class: "t4" });
+  const stamp = j?.t_received || e.at || "";                        // Story 2.3: when the answer came back, as logged (UTC)
+  t4.append(el("span", { class: "at", "data-testid": `turn-${n}-at`, "data-value": stamp, text: stamp ? stamp.slice(11, 23) : "—" }));
   t4.append(el("span", { "data-testid": `turn-${n}-ms`, "data-value": j?.ms ?? 0, text: j ? fmt.ms(j.ms || 0) : "—" }), el("span", { "data-testid": `turn-${n}-baht`, "data-value": j?.cost_usd ?? 0, text: j && j.cost_usd ? fmt.baht(j.cost_usd) : "฿0" }), el("span", { "data-testid": `turn-${n}-usd`, "data-value": j?.cost_usd ?? 0, text: j && j.cost_usd ? fmt.usd(j.cost_usd) : "—" }));
   t4.append(el("button", { class: "open", "data-testid": `turn-${n}-open`, text: "open", onclick: () => openViewer(n) }));
   row.append(t4); rows.prepend(row);
